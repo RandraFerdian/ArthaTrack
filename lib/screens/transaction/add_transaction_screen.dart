@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:arthatrack/controllers/finance_controller.dart';
 
 class AddTransactionScreen extends StatefulWidget {
@@ -48,8 +49,23 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       );
       return;
     }
+
+    // [DIPERBAIKI] Buang semua karakter koma (,) sebelum mengubah teks menjadi tipe angka (double)
+    String cleanAmount = _amountController.text.replaceAll(',', '');
+    double amount = double.tryParse(cleanAmount) ?? 0.0;
+
+    if (amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Nominal transaksi harus lebih besar dari Rp 0!"),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Color(0xFFFF5252),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
-    double amount = double.tryParse(_amountController.text) ?? 0.0;
     String? error = await _financeController.addTransaction(
       title: _titleController.text,
       amount: amount,
@@ -57,8 +73,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       category: _selectedCategory,
     );
     setState(() => _isLoading = false);
+
     if (error == null) {
       Navigator.pop(context, true);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: const Color(0xFFFF5252),
+        ),
+      );
     }
   }
 
@@ -94,7 +118,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // 1. TOGGLE SWITCH PREMIUM (Pill-shape)
                       Container(
                         height: 50,
                         padding: const EdgeInsets.all(4),
@@ -111,7 +134,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ),
                       const SizedBox(height: 40),
 
-                      // 2. INPUT NOMINAL CLEAN (Tanpa kotak)
                       const Text(
                         "Nominal Transaksi",
                         style: TextStyle(
@@ -122,7 +144,16 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ),
                       TextField(
                         controller: _amountController,
-                        keyboardType: TextInputType.number,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: false,
+                          signed: false,
+                        ),
+                        
+                        inputFormatters: [
+                          FilteringTextInputFormatter
+                              .digitsOnly, 
+                          CurrencyInputFormatter(), 
+                        ],
                         textAlign: TextAlign.center,
                         cursorColor: activeColor,
                         style: TextStyle(
@@ -137,7 +168,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                           prefixText: "Rp ",
                           prefixStyle: TextStyle(
                             color: Colors.white,
-                            fontSize: 24,
+                            fontSize: 48,
                             fontWeight: FontWeight.w600,
                           ),
                           border: InputBorder.none,
@@ -146,7 +177,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ),
                       const SizedBox(height: 10),
 
-                      // 3. INPUT CATATAN (Sleek minimalist line)
                       TextField(
                         controller: _titleController,
                         textAlign: TextAlign.center,
@@ -162,7 +192,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                       ),
                       const SizedBox(height: 40),
 
-                      // 4. KATEGORI (Ikon Sirkular Eksklusif)
                       const Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
@@ -241,7 +270,6 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
               ),
             ),
 
-            // 5. TOMBOL SIMPAN (Mengambang di bawah)
             Container(
               padding: const EdgeInsets.only(
                 left: 24,
@@ -268,7 +296,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
                     backgroundColor: activeColor,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30),
-                    ), // Pill-shape full
+                    ),
                     elevation: 0,
                   ),
                   child: _isLoading
@@ -331,6 +359,37 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ==========================================
+// KELAS TAMBAHAN: Custom Input Formatter
+// ==========================================
+class CurrencyInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // 1. Hapus semua karakter yang bukan angka (termasuk koma lama)
+    String cleanText = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+
+    // Jika kosong, kembalikan string kosong
+    if (cleanText.isEmpty) {
+      return newValue.copyWith(text: '');
+    }
+
+    // 2. Format ulang string bersih menjadi ada koma setiap 3 digit
+    String formattedText = cleanText.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+
+    // 3. Kembalikan teks yang sudah diformat dan letakkan kursor selalu di ujung kanan
+    return TextEditingValue(
+      text: formattedText,
+      selection: TextSelection.collapsed(offset: formattedText.length),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:arthatrack/controllers/currency_controller.dart';
 
 class CurrencyConversionScreen extends StatefulWidget {
@@ -13,41 +14,60 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
 
   String _fromCurrency = 'USD';
   String _toCurrency = 'IDR';
-  double? _resultAmount;
-  bool _isLoading = false;
+  double _convertedValue = 0.0;
 
-  // Variabel baru untuk menampung data dari API
   bool _isLoadingRates = true;
   List<Map<String, dynamic>> _bankRates = [];
 
   final List<Map<String, dynamic>> _currencyData = [
-    {'code': 'IDR', 'name': 'Indonesian Rupiah', 'color': Colors.red},
-    {'code': 'USD', 'name': 'US Dollar', 'color': Colors.blue},
-    {'code': 'EUR', 'name': 'Euro', 'color': Colors.indigo},
-    {'code': 'JPY', 'name': 'Japanese Yen', 'color': Colors.redAccent},
-    {'code': 'GBP', 'name': 'British Pound', 'color': Colors.deepPurple},
-    {'code': 'MYR', 'name': 'Malaysian Ringgit', 'color': Colors.yellow},
-    {'code': 'SGD', 'name': 'Singapore Dollar', 'color': Colors.red},
+    {'code': 'IDR', 'name': 'Indonesia', 'flag': '🇮🇩', 'color': Colors.red},
+    {
+      'code': 'USD',
+      'name': 'United States',
+      'flag': '🇺🇸',
+      'color': Colors.blue,
+    },
+    {
+      'code': 'EUR',
+      'name': 'European Union',
+      'flag': '🇪🇺',
+      'color': Colors.indigo,
+    },
+    {'code': 'JPY', 'name': 'Japan', 'flag': '🇯🇵', 'color': Colors.redAccent},
+    {
+      'code': 'GBP',
+      'name': 'United Kingdom',
+      'flag': '🇬🇧',
+      'color': Colors.deepPurple,
+    },
+    {'code': 'MYR', 'name': 'Malaysia', 'flag': '🇲🇾', 'color': Colors.yellow},
+    {'code': 'SGD', 'name': 'Singapore', 'flag': '🇸🇬', 'color': Colors.red},
   ];
 
   @override
   void initState() {
     super.initState();
-    _loadBankRates(); // Panggil API saat halaman dibuka
+    _amountController.addListener(_onAmountChanged);
+    _loadBankRates();
   }
 
-  // Fungsi untuk menarik data dari Frankfurter API
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  void _onAmountChanged() {
+    _performInstantConversion();
+  }
+
   Future<void> _loadBankRates() async {
     setState(() => _isLoadingRates = true);
-
-    // Kita ingin referensi terhadap IDR dari mata uang utama ini
-    List<String> currenciesToCheck = ['USD', 'EUR', 'SGD', 'JPY', 'MYR', 'GBP'];
-
+    List<String> currenciesToCheck = ['USD', 'EUR', 'SGD', 'JPY', 'MYR'];
     final rates = await _currencyController.getBankRates(
       'IDR',
       currenciesToCheck,
     );
-
     if (mounted) {
       setState(() {
         _bankRates = rates;
@@ -56,13 +76,31 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
     }
   }
 
+  Future<void> _performInstantConversion() async {
+    if (_amountController.text.isEmpty) {
+      setState(() => _convertedValue = 0.0);
+      return;
+    }
+    // Bersihkan koma sebelum dikirim ke API
+    double amount =
+        double.tryParse(_amountController.text.replaceAll(',', '')) ?? 0.0;
+    double? result = await _currencyController.convertCurrency(
+      fromCurrency: _fromCurrency,
+      toCurrency: _toCurrency,
+      amount: amount,
+    );
+    if (mounted && result != null) {
+      setState(() => _convertedValue = result);
+    }
+  }
+
   void _swapCurrencies() {
     setState(() {
       String temp = _fromCurrency;
       _fromCurrency = _toCurrency;
       _toCurrency = temp;
-      _resultAmount = null;
     });
+    _performInstantConversion();
   }
 
   void _showCurrencyPicker(bool isFrom) {
@@ -103,15 +141,9 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
                   itemBuilder: (context, index) {
                     final curr = _currencyData[index];
                     return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: curr['color'].withOpacity(0.2),
-                        child: Text(
-                          curr['code'][0],
-                          style: TextStyle(
-                            color: curr['color'],
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                      leading: Text(
+                        curr['flag'],
+                        style: const TextStyle(fontSize: 24),
                       ),
                       title: Text(
                         curr['code'],
@@ -133,9 +165,9 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
                             _fromCurrency = curr['code'];
                           else
                             _toCurrency = curr['code'];
-                          _resultAmount = null;
                         });
                         Navigator.pop(context);
+                        _performInstantConversion();
                       },
                     );
                   },
@@ -146,26 +178,6 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
         );
       },
     );
-  }
-
-  Future<void> _handleConvert() async {
-    if (_amountController.text.isEmpty) return;
-    setState(() {
-      _isLoading = true;
-      _resultAmount = null;
-    });
-
-    double amount = double.tryParse(_amountController.text) ?? 0.0;
-    double? result = await _currencyController.convertCurrency(
-      fromCurrency: _fromCurrency,
-      toCurrency: _toCurrency,
-      amount: amount,
-    );
-
-    setState(() {
-      _isLoading = false;
-      _resultAmount = result;
-    });
   }
 
   @override
@@ -184,340 +196,277 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Kalkulator Kurs",
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
+          "Konversi Valas",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-                  // --- AREA KALKULATOR UTAMA ---
-                  TextField(
-                    controller: _amountController,
-                    keyboardType: TextInputType.number,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 48,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: "0.00",
-                      hintStyle: TextStyle(color: Colors.white10),
-                      border: InputBorder.none,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildCurrencyRow(_fromCurrency, true),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              const Divider(
-                                color: Colors.white10,
-                                thickness: 1,
-                              ),
-                              GestureDetector(
-                                onTap: _swapCurrencies,
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: const BoxDecoration(
-                                    color: Color(0xFF2A2A2A),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.swap_vert_rounded,
-                                    color: Color(0xFF00C853),
-                                    size: 24,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        _buildCurrencyRow(_toCurrency, false),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  if (_resultAmount != null)
-                    TweenAnimationBuilder(
-                      tween: Tween<double>(begin: 0, end: 1),
-                      duration: const Duration(milliseconds: 500),
-                      builder: (context, double value, child) {
-                        return Opacity(
-                          opacity: value,
-                          child: Transform.translate(
-                            offset: Offset(0, 20 * (1 - value)),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 16,
-                          horizontal: 24,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00C853).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: const Color(0xFF00C853).withOpacity(0.3),
-                          ),
-                        ),
-                        child: Text(
-                          "= ${_resultAmount!.toStringAsFixed(2)} $_toCurrency",
-                          style: const TextStyle(
-                            color: Color(0xFF00C853),
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                  const SizedBox(height: 48),
-
-                  // --- AREA TABEL KURS BANK (REAL-TIME) ---
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Referensi Kurs (IDR)",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      _isLoadingRates
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                color: Colors.grey,
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : Text(
-                              "Live Hari Ini",
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 12,
-                              ),
-                            ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Menampilkan Indikator Loading atau List Data
-                  if (_isLoadingRates)
-                    const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(32.0),
-                        child: CircularProgressIndicator(
-                          color: Color(0xFF00C853),
-                        ),
-                      ),
-                    )
-                  else if (_bankRates.isEmpty)
-                    const Center(
-                      child: Text(
-                        "Gagal mengambil data dari API",
-                        style: TextStyle(color: Colors.redAccent),
-                      ),
-                    )
-                  else
-                    ..._bankRates
-                        .map((rateData) => _buildBankRateCard(rateData))
-                        .toList(),
-                ],
-              ),
-            ),
-          ),
-
-          // --- TOMBOL KONVERSI BAWAH ---
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: SizedBox(
-              width: double.infinity,
-              height: 60,
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : _handleConvert,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00C853),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  elevation: 0,
-                ),
-                child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        "Hitung Konversi",
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.white,
-                        ),
-                      ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Widget Pemilih Mata Uang Atas
-  Widget _buildCurrencyRow(String code, bool isFrom) {
-    final data = _currencyData.firstWhere(
-      (e) => e['code'] == code,
-      orElse: () => _currencyData[0],
-    );
-    return InkWell(
-      onTap: () => _showCurrencyPicker(isFrom),
-      borderRadius: BorderRadius.circular(24),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        child: Row(
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        child: Column(
           children: [
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: data['color'].withOpacity(0.1),
-              child: Text(
-                code[0],
-                style: TextStyle(
-                  color: data['color'],
-                  fontWeight: FontWeight.bold,
+            // BOX 1: SOURCE CURRENCY
+            _buildCurrencyBox(
+              label: "Dari",
+              currencyCode: _fromCurrency,
+              isInput: true,
+              controller: _amountController,
+              onTap: () => _showCurrencyPicker(true),
+            ),
+
+            // SWAP BUTTON
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: GestureDetector(
+                onTap: _swapCurrencies,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2A2A2A),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.swap_vert_rounded,
+                    color: Color(0xFF00C853),
+                    size: 28,
+                  ),
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-            Text(
-              code,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
+
+            // BOX 2: TARGET CURRENCY
+            _buildCurrencyBox(
+              label: "Ke",
+              currencyCode: _toCurrency,
+              isInput: false,
+              value: _convertedValue,
+              onTap: () => _showCurrencyPicker(false),
             ),
-            const Spacer(),
-            const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey),
+
+            const SizedBox(height: 48),
+
+            // TABLE: PRICE CHANGE PER CENTAGE
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Tabel kurs hari ini",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            if (_isLoadingRates)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(color: Color(0xFF00C853)),
+                ),
+              )
+            else
+              ..._bankRates.map((rate) => _buildRateRow(rate)).toList(),
           ],
         ),
       ),
     );
   }
 
-  // Widget Kartu Tabel Kurs Bank
-  Widget _buildBankRateCard(Map<String, dynamic> data) {
-    bool? isUp = data['isUp'];
-    Color statusColor = Colors.grey;
-    IconData statusIcon = Icons.remove_rounded;
+  Widget _buildCurrencyBox({
+    required String label,
+    required String currencyCode,
+    required bool isInput,
+    required VoidCallback onTap,
+    TextEditingController? controller,
+    double? value,
+  }) {
+    final curr = _currencyData.firstWhere((e) => e['code'] == currencyCode);
 
-    if (isUp == true) {
-      statusColor = const Color(0xFF00C853); // Hijau
-      statusIcon = Icons.trending_up_rounded;
-    } else if (isUp == false) {
-      statusColor = const Color(0xFFFF5252); // Merah
-      statusIcon = Icons.trending_down_rounded;
+    // --- LOGIKA FORMAT KOMA UNTUK HASIL (OUTPUT) ---
+    String formattedOutput = "0.00";
+    if (value != null && value > 0) {
+      String valStr = value.toStringAsFixed(2);
+      List<String> parts = valStr.split('.');
+      String formattedInteger = parts[0].replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (Match m) => '${m[1]},',
+      );
+      formattedOutput = parts.length > 1
+          ? "$formattedInteger.${parts[1]}"
+          : formattedInteger;
     }
+    // -----------------------------------------------
 
-    final curr = _currencyData.firstWhere(
-      (e) => e['code'] == data['code'],
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: onTap,
+                child: Row(
+                  children: [
+                    Text(curr['flag'], style: const TextStyle(fontSize: 28)),
+                    const SizedBox(width: 8),
+                    Text(
+                      currencyCode,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              Expanded(
+                flex: 2,
+                child: isInput
+                    ? TextField(
+                        controller: controller,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          signed: false,
+                          decimal: false,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          CurrencyInputFormatter(),
+                        ],
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize:
+                              24, // Saya kembalikan ke ukuran 24 agar seimbang dengan bendera
+                          fontWeight: FontWeight.bold,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: "0",
+                          hintStyle: TextStyle(color: Colors.white10),
+                          border: InputBorder.none,
+                        ),
+                      )
+                    : Text(
+                        // Menggunakan variabel yang sudah diberi koma
+                        formattedOutput,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(
+                          color: Color(0xFF00C853),
+                          fontSize:
+                              24, 
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRateRow(Map<String, dynamic> rate) {
+    bool? isUp = rate['isUp'];
+    Color statusColor = isUp == true
+        ? const Color(0xFF00C853)
+        : (isUp == false ? const Color(0xFFFF5252) : Colors.grey);
+
+    final currInfo = _currencyData.firstWhere(
+      (e) => e['code'] == rate['code'],
       orElse: () => _currencyData[0],
     );
 
+    // --- LOGIKA FORMAT ANGKA ---
+    String rateStr = rate['rate'].toStringAsFixed(2);
+    List<String> parts = rateStr.split('.');
+    String formattedInteger = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    String finalFormattedRate = parts.length > 1
+        ? "$formattedInteger.${parts[1]}"
+        : formattedInteger;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 20,
-            backgroundColor: curr['color'].withOpacity(0.15),
-            child: Text(
-              data['code'][0],
-              style: TextStyle(
-                color: curr['color'],
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
-            ),
-          ),
+          Text(currInfo['flag'], style: const TextStyle(fontSize: 24)),
           const SizedBox(width: 16),
-
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "1 ${data['code']}",
+                  rate['code'],
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
-                    fontSize: 16,
                   ),
                 ),
-                const SizedBox(height: 4),
+                // Gunakan variabel yang sudah diformat
                 Text(
-                  "Rp ${data['rate'].toStringAsFixed(2)}",
-                  style: const TextStyle(color: Colors.grey, fontSize: 14),
+                  "Rp $finalFormattedRate",
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ],
             ),
           ),
-
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(statusIcon, color: statusColor, size: 16),
-                const SizedBox(width: 4),
-                Text(
-                  data['percent'],
-                  style: TextStyle(
-                    color: statusColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+            child: Text(
+              rate['percent'],
+              style: TextStyle(
+                color: statusColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class CurrencyInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    if (newValue.text.isEmpty) return newValue.copyWith(text: '');
+    String cleanText = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    String formattedText = cleanText.replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    return TextEditingValue(
+      text: formattedText,
+      selection: TextSelection.collapsed(offset: formattedText.length),
     );
   }
 }

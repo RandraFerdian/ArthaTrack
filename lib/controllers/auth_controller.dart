@@ -6,7 +6,6 @@ class AuthController {
   final LocalAuthentication auth = LocalAuthentication();
 
   // 1. Logika Register
-  // Mengembalikan nilai 'null' jika sukses, atau pesan error (String) jika gagal.
   Future<String?> register(String username, String password) async {
     try {
       final newUserId = await DatabaseHelper.instance.registerUser(
@@ -55,7 +54,7 @@ class AuthController {
         String? username = prefs.getString('username');
 
         if (userId != null && username != null) {
-          await _saveSession(userId!, username!);
+          await _saveSession(userId, username);
           return null; // Sukses
         } else {
           return "Sesi tidak ditemukan. Silakan login manual dulu.";
@@ -75,4 +74,10 @@ class AuthController {
     await prefs.setInt('userId', userId);
     await prefs.setString('username', username);
   }
-}
+
+  // 5. [DIPERBAIKI] Logika Mengambil Nama User (Sekarang di DALAM class)
+  Future<String?> getLoggedInUserName() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('username');
+  }
+} // <-- Tutup kurung class-nya harus di paling bawah sini

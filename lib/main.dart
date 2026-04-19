@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arthatrack/screens/auth/login_screen.dart';
 import 'package:arthatrack/screens/dashboard/dashboard_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:arthatrack/main_screen.dart';
 
 void main() async {
   // 1. Wajib ditambahkan jika kita menggunakan fungsi async (seperti SharedPreferences) sebelum runApp
@@ -38,7 +39,7 @@ class ArthaTrackApp extends StatelessWidget {
           Theme.of(context).textTheme.apply(bodyColor: Colors.white),
         ),
       ),
-      home: isLoggedIn ? DashboardScreen() : LoginScreen(),
+      home: isLoggedIn ? const MainScreen() : LoginScreen(),
     );
   }
 }
