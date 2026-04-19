@@ -1,7 +1,12 @@
+import 'dart:async';
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 import 'package:arthatrack/controllers/finance_controller.dart';
-// Nanti kita buat halaman ini, sementara di-comment dulu
-// import 'package:arthatrack/screens/transaction/add_transaction_screen.dart';
+import 'package:arthatrack/screens/transaction/add_transaction_screen.dart';
+import 'package:arthatrack/screens/transaction/currency_conversion_screen.dart';
+import 'package:arthatrack/controllers/currency_controller.dart';
+import 'package:arthatrack/screens/transaction/transaction_history_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -10,41 +15,176 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final FinanceController _financeController = FinanceController();
+  final CurrencyController _currencyController = CurrencyController();
 
   double _totalBalance = 0.0;
+  double _displayBalance = 0.0;
   List<Map<String, dynamic>> _recentTransactions = [];
+  String _selectedCurrency = 'IDR';
   bool _isLoading = true;
+  bool _isConverting = false;
+
+  StreamSubscription<UserAccelerometerEvent>? _accelerometerSubscription;
+  DateTime _lastRefreshTime = DateTime.now();
 
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
+    _initAccelerometer();
   }
 
-  // Mengambil data Saldo dan Transaksi dari SQLite
+  void _initAccelerometer() {
+    _accelerometerSubscription = userAccelerometerEventStream().listen((
+      UserAccelerometerEvent event,
+    ) {
+      double acceleration = sqrt(
+        pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2),
+      );
+
+      if (acceleration > 15) {
+        final now = DateTime.now();
+        if (now.difference(_lastRefreshTime).inSeconds > 3) {
+          _lastRefreshTime = now;
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("🔄 Memperbarui data saldo & transaksi..."),
+                duration: Duration(seconds: 1),
+                backgroundColor: Color(0xFF1A237E),
+              ),
+            );
+          }
+          _loadDashboardData();
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _accelerometerSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadDashboardData() async {
     setState(() => _isLoading = true);
-
     double balance = await _financeController.getTotalBalance();
     List<Map<String, dynamic>> transactions = await _financeController
         .getUserTransactions();
 
     setState(() {
       _totalBalance = balance;
+      _displayBalance = balance; // Default sama dengan total asli
       _recentTransactions = transactions;
       _isLoading = false;
+      _selectedCurrency = 'IDR';
     });
   }
 
-  // Format angka ke Rupiah sederhana
-  String _formatRupiah(double amount) {
-    return "Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}";
+  Future<void> _changeDisplayCurrency(String code) async {
+    if (code == 'IDR') {
+      setState(() {
+        _displayBalance =
+            _totalBalance; // [DIPERBAIKI] Menggunakan _totalBalance
+        _selectedCurrency = 'IDR';
+      });
+      return;
+    }
+
+    setState(() => _isConverting = true);
+
+    double? result = await _currencyController.convertCurrency(
+      fromCurrency: 'IDR',
+      toCurrency: code,
+      amount: _totalBalance, // [DIPERBAIKI] Menggunakan _totalBalance
+    );
+
+    setState(() {
+      _isConverting = false;
+      if (result != null) {
+        _displayBalance = result;
+        _selectedCurrency = code;
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Gagal mengonversi. Cek internet.")),
+        );
+      }
+    });
+  }
+
+  void _showCurrencySelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: ['IDR', 'USD', 'EUR', 'JPY', 'SGD']
+              .map(
+                (code) => ListTile(
+                  title: Text(
+                    code,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  trailing: _selectedCurrency == code
+                      ? const Icon(Icons.check_circle, color: Color(0xFF00C853))
+                      : null,
+                  onTap: () {
+                    Navigator.pop(context);
+                    _changeDisplayCurrency(code);
+                  },
+                ),
+              )
+              .toList(),
+        ),
+      ),
+    );
+  }
+
+  // [DIPERBAIKI] Menerima 2 parameter: angka dan mata uangnya
+  String _formatDisplay(double amount, String code) {
+    final Map<String, String> currencySymbols = {
+      'IDR': 'IDR',
+      'USD': 'USD',
+      'EUR': 'EUR',
+      'JPY': 'JPY',
+      'GBP': 'GBP',
+      'MYR': 'MYR',
+      'SGD': 'SGD',
+      'AUD': 'AUD',
+      'CAD': 'CAD',
+      'CHF': 'CHF',
+      'CNY': 'CNY',
+      'KRW': 'KRW',
+    };
+    String symbol = currencySymbols[code] ?? code;
+    int decimals = (code == 'IDR' || code == 'JPY') ? 0 : 2;
+    String amountStr = amount.toStringAsFixed(decimals);
+    List<String> parts = amountStr.split('.');
+    String formattedInteger = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    String finalAmount = parts.length > 1
+        ? "$formattedInteger.${parts[1]}"
+        : formattedInteger;
+
+    return "$symbol $finalAmount";
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212), // Dark theme
+      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -77,8 +217,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: CircularProgressIndicator(color: Color(0xFF00C853)),
             )
           : RefreshIndicator(
-              onRefresh:
-                  _loadDashboardData, // Tarik layar ke bawah untuk refresh
+              onRefresh: _loadDashboardData,
               color: const Color(0xFF00C853),
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -86,65 +225,98 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1. KARTU SALDO UTAMA
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            Color(0xFF1A237E),
-                            Color(0xFF0D47A1),
-                          ], // Warna Biru Bank Premium
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
+                    // 1. KARTU SALDO UTAMA (BISA DIKLIK)
+                    GestureDetector(
+                      onTap:
+                          _showCurrencySelector, // [DIPERBAIKI] Fungsi klik ditambah
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF1A237E), Color(0xFF0D47A1)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF1A237E).withOpacity(0.3),
+                              blurRadius: 15,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
                         ),
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF1A237E).withOpacity(0.3),
-                            blurRadius: 15,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Total Saldo",
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _formatRupiah(_totalBalance),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 36,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                "ArthaTrack Smart Wallet",
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 12,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  "Total Saldo",
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 16,
+                                  ),
                                 ),
-                              ),
-                              const Icon(
-                                Icons.contactless,
-                                color: Colors.white54,
-                              ),
-                            ],
-                          ),
-                        ],
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white10,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    _selectedCurrency,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            // Tampilkan Indikator Loading kalau lagi proses konversi API
+                            _isConverting
+                                ? const SizedBox(
+                                    height: 40,
+                                    width: 40,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    _formatDisplay(
+                                      _displayBalance,
+                                      _selectedCurrency,
+                                    ), // [DIPERBAIKI] Panggil format yang benar
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 36,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                            const SizedBox(height: 24),
+                            const Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "ArthaTrack Smart Wallet",
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                Icon(Icons.contactless, color: Colors.white54),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: 30),
@@ -177,11 +349,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // 3. DAFTAR TRANSAKSI TERBARU
-                    const Row(
+                    Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
+                        const Text(
                           "Transaksi Terbaru",
                           style: TextStyle(
                             color: Colors.white,
@@ -189,18 +360,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Text(
-                          "Lihat Semua",
-                          style: TextStyle(
-                            color: Color(0xFF00C853),
-                            fontSize: 14,
+                        GestureDetector(
+                          onTap: () {
+                            // Navigasi ke Halaman Riwayat Transaksi saat "Lihat Semua" diklik
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    TransactionHistoryScreen(),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            "Lihat Semua",
+                            style: TextStyle(
+                              color: Color(0xFF00C853),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-
-                    // List Transaksi (Jika kosong atau ada isinya)
                     _recentTransactions.isEmpty
                         ? const Center(
                             child: Padding(
@@ -216,52 +398,66 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             physics: const NeverScrollableScrollPhysics(),
                             itemCount: _recentTransactions.length > 5
                                 ? 5
-                                : _recentTransactions.length, // Tampilkan max 5
+                                : _recentTransactions.length,
                             itemBuilder: (context, index) {
                               final trx = _recentTransactions[index];
                               bool isIncome = trx['type'] == 'income';
+                              String amountStr = _formatDisplay(
+                                trx['amount'],
+                                'IDR',
+                              );
+
                               return Card(
                                 color: const Color(0xFF1E1E1E),
                                 margin: const EdgeInsets.only(bottom: 12),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    backgroundColor: isIncome
-                                        ? Colors.green.withOpacity(0.2)
-                                        : Colors.redAccent.withOpacity(0.2),
-                                    child: Icon(
-                                      isIncome
-                                          ? Icons.arrow_downward
-                                          : Icons.arrow_upward,
-                                      color: isIncome
-                                          ? Colors.green
-                                          : Colors.redAccent,
-                                    ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  // Panggil fungsi showTransactionDetail yang kita buat di file history tadi
+                                  onTap: () => showTransactionDetail(
+                                    context,
+                                    trx,
+                                    amountStr,
                                   ),
-                                  title: Text(
-                                    trx['title'],
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
+                                  child: ListTile(
+                                    leading: CircleAvatar(
+                                      backgroundColor: isIncome
+                                          ? Colors.green.withOpacity(0.2)
+                                          : Colors.redAccent.withOpacity(0.2),
+                                      child: Icon(
+                                        isIncome
+                                            ? Icons.arrow_downward
+                                            : Icons.arrow_upward,
+                                        color: isIncome
+                                            ? Colors.green
+                                            : Colors.redAccent,
+                                      ),
                                     ),
-                                  ),
-                                  subtitle: Text(
-                                    trx['category'],
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
+                                    title: Text(
+                                      trx['title'],
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
-                                  ),
-                                  trailing: Text(
-                                    "${isIncome ? '+' : '-'} ${_formatRupiah(trx['amount'])}",
-                                    style: TextStyle(
-                                      color: isIncome
-                                          ? Colors.green
-                                          : Colors.redAccent,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                                    subtitle: Text(
+                                      trx['category'],
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    trailing: Text(
+                                      "${isIncome ? '+' : '-'} $amountStr",
+                                      style: TextStyle(
+                                        color: isIncome
+                                            ? Colors.green
+                                            : Colors.redAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -272,7 +468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-      // 4. BOTTOM NAVIGATION BAR (Syarat Kriteria)
+
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: const Color(0xFF1E1E1E),
         selectedItemColor: const Color(0xFF00C853),
@@ -294,7 +490,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // Widget Bantuan untuk Tombol Aksi Cepat
   Widget _buildActionButton(IconData icon, String label, Color color) {
     return Column(
       children: [
@@ -307,8 +502,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           child: IconButton(
             icon: Icon(icon, color: color, size: 28),
-            onPressed: () {
-              // Nanti dihubungkan ke form input
+            onPressed: () async {
+              if (label == "Pemasukan" || label == "Pengeluaran") {
+                String type = label == "Pemasukan" ? "income" : "expense";
+                bool? shouldRefresh = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        AddTransactionScreen(initialType: type),
+                  ),
+                );
+                if (shouldRefresh == true) {
+                  _loadDashboardData();
+                }
+              } else if (label == "Konversi") {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CurrencyConversionScreen(),
+                  ),
+                );
+              }
             },
           ),
         ),

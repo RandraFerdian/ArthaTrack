@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arthatrack/screens/auth/login_screen.dart';
 import 'package:arthatrack/screens/dashboard/dashboard_screen.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   // 1. Wajib ditambahkan jika kita menggunakan fungsi async (seperti SharedPreferences) sebelum runApp
@@ -24,8 +25,7 @@ class ArthaTrackApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ArthaTrack',
-      debugShowCheckedModeBanner:
-          false,
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF121212),
@@ -34,7 +34,9 @@ class ArthaTrackApp extends StatelessWidget {
           primary: Color(0xFF00C853),
           secondary: Color(0xFF1A237E),
         ),
-        fontFamily: 'Inter', 
+        textTheme: GoogleFonts.plusJakartaSansTextTheme(
+          Theme.of(context).textTheme.apply(bodyColor: Colors.white),
+        ),
       ),
       home: isLoggedIn ? DashboardScreen() : LoginScreen(),
     );
