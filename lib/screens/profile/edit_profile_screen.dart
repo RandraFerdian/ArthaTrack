@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:arthatrack/controllers/auth_controller.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final String currentName;
@@ -20,18 +22,42 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late TextEditingController _nameController;
   late TextEditingController _bioController;
   bool _isLoading = false;
+  String _profileImagePath = ""; // Variabel penampung foto
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.currentName);
     _bioController = TextEditingController(text: widget.currentBio);
+    _loadProfileImage(); // Panggil foto saat halaman dibuka
+  }
+
+  // Memuat foto profil yang sudah ada
+  Future<void> _loadProfileImage() async {
+    String imagePath = await _authController.getUserProfileImage();
+    if (mounted) {
+      setState(() {
+        _profileImagePath = imagePath;
+      });
+    }
+  }
+
+  // Membuka galeri dan menyimpan foto
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      await _authController.updateProfileImage(image.path);
+      setState(() {
+        _profileImagePath = image.path;
+      });
+    }
   }
 
   Future<void> _saveProfile() async {
     setState(() => _isLoading = true);
 
-    // Panggil fungsi yang sudah kita perbarui
     String? error = await _authController.updateUserProfile(
       _nameController.text,
       _bioController.text,
@@ -42,7 +68,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (error == null) {
       if (mounted) Navigator.pop(context, true);
     } else {
-      // Tampilkan pesan jika gagal update database
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error), backgroundColor: Colors.red),
       );
@@ -70,37 +95,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
-            // FOTO PROFIL (Placeholder)
-            Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF1E1E1E),
-                    border: Border.all(
-                      color: const Color(0xFF00C853),
-                      width: 3,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    size: 60,
-                    color: Color(0xFF00C853),
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        "Gunakan package image_picker untuk upload foto!",
+            // FOTO PROFIL BISA DIKLIK
+            GestureDetector(
+              onTap: _pickImage,
+              child: Stack(
+                alignment: Alignment.bottomRight,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF1E1E1E),
+                      border: Border.all(
+                        color: const Color(0xFF00C853),
+                        width: 3,
                       ),
+                      image: _profileImagePath.isNotEmpty
+                          ? DecorationImage(
+                              image: FileImage(File(_profileImagePath)),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
+                    child: _profileImagePath.isEmpty
+                        ? const Icon(
+                            Icons.person_rounded,
+                            size: 60,
+                            color: Color(0xFF00C853),
+                          )
+                        : null,
                   ),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
                     decoration: const BoxDecoration(
                       color: Color(0xFF00C853),
                       shape: BoxShape.circle,
@@ -111,12 +138,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       size: 20,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 40),
 
-            // INPUT NAMA
             _buildInputField(
               label: "Nama Lengkap",
               controller: _nameController,
@@ -124,7 +150,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(height: 24),
 
-            // INPUT BIO/JURUSAN
             _buildInputField(
               label: "Bio",
               controller: _bioController,
@@ -133,7 +158,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
             const SizedBox(height: 60),
 
-            // TOMBOL SIMPAN
             SizedBox(
               width: double.infinity,
               height: 55,

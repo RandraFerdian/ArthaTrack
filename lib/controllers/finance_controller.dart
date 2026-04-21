@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arthatrack/services/database_helper.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FinanceController {
   // ==========================================
@@ -50,8 +51,7 @@ class FinanceController {
         'amount': amount,
         'type': type,
         'category': category,
-        'date':
-            date ??
+        'date': date ??
             DateTime.now()
                 .toIso8601String(), // Gunakan tanggal input atau hari ini
         'latitude': position?.latitude,
@@ -318,7 +318,29 @@ class FinanceController {
       return response.text ?? "Gagal mendapatkan insight.";
     } catch (e) {
       print("🚨 ERROR AI INSIGHT: $e");
-      return "Artha AI sedang memantau keuanganmu...";
+      return "Artha AI Gagal mendapatkan insight.";
     }
+  }
+
+  // [DIPERBAIKI] Ditambah parameter bulan dan tahun
+  Future<List<Map<String, dynamic>>> getTransactionsWithLocation(
+      int month, int year) async {
+    final db = await DatabaseHelper.instance.database;
+
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? currentUserId = prefs.getInt('userId');
+
+    if (currentUserId == null) return [];
+
+    // Menggunakan parameter yang dikirim dari UI
+    final String monthStr = month.toString().padLeft(2, '0');
+    final String yearStr = year.toString();
+
+    return await db.query(
+      'transactions',
+      where:
+          "user_id = ? AND strftime('%m', date) = ? AND strftime('%Y', date) = ? AND latitude IS NOT NULL",
+      whereArgs: [currentUserId, monthStr, yearStr],
+    );
   }
 }

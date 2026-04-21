@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arthatrack/screens/auth/login_screen.dart';
-import 'package:arthatrack/screens/dashboard/dashboard_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:arthatrack/main_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:arthatrack/services/notification_helper.dart';
 
 void main() async {
   // 1. Wajib ditambahkan jika kita menggunakan fungsi async (seperti SharedPreferences) sebelum runApp
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+  await NotificationHelper.init();
 
   // 2. Cek apakah ada session yang tersimpan
   SharedPreferences prefs = await SharedPreferences.getInstance();

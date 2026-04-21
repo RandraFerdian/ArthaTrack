@@ -103,6 +103,32 @@ class AuthController {
     }
   }
 
+  // [BARU] Logika untuk mengubah password
+  Future<String?> changePassword(String oldPassword, String newPassword) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      int? userId = prefs.getInt('userId');
+
+      if (userId == null)
+        return "Sesi user tidak ditemukan. Silakan login ulang.";
+
+      // 1. Ambil data user dari database untuk mencocokkan password lama
+      final user = await DatabaseHelper.instance.getUserById(userId);
+      if (user == null) return "Data user tidak ditemukan di database.";
+
+      // 2. Verifikasi apakah password lama yang dimasukkan benar
+      if (user['password'] != oldPassword) {
+        return "Password lama yang Anda masukkan salah!";
+      }
+
+      // 3. Jika benar, update dengan password baru
+      await DatabaseHelper.instance.updatePassword(userId, newPassword);
+      return null; // Mengembalikan null berarti sukses
+    } catch (e) {
+      return "Terjadi kesalahan sistem: $e";
+    }
+  }
+
   // [BARU] Ambil Bio/Jurusan
   Future<String> getUserBio() async {
     final prefs = await SharedPreferences.getInstance();

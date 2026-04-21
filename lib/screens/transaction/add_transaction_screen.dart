@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:arthatrack/controllers/finance_controller.dart';
+import 'package:arthatrack/services/notification_helper.dart';
+import 'package:intl/intl.dart';
 
 class AddTransactionScreen extends StatefulWidget {
   final String initialType;
@@ -139,8 +141,19 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     setState(() => _isLoading = false);
 
-    if (error == null) {
-      Navigator.pop(context, true); // Kembali dengan state success
+if (error == null) {
+      // [BARU] Munculkan Notifikasi Sistem!
+      // Ubah tipe bahasa Inggris jadi bahasa Indonesia untuk notif
+      String tipeText = _selectedType == 'income' ? 'Pemasukan' : 'Pengeluaran';
+      String formattedNominal = "Rp ${NumberFormat('#,###').format(amount)}";
+
+      await NotificationHelper.showTransactionNotification(
+        title: "$tipeText Berhasil Dicatat! ✅",
+        body:
+            "${_titleController.text} sebesar $formattedNominal telah tersimpan.",
+      );
+
+      Navigator.pop(context, true); // Kembali dengan state success ke Dashboard
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

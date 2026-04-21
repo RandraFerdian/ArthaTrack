@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:arthatrack/controllers/finance_controller.dart';
 import 'package:arthatrack/screens/transaction/transaction_history_screen.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import 'dart:math';
+import 'dart:async';
 
 class StatisticScreen extends StatefulWidget {
   const StatisticScreen({super.key});
@@ -12,7 +15,8 @@ class StatisticScreen extends StatefulWidget {
 
 class _StatisticScreenState extends State<StatisticScreen> {
   final FinanceController _financeController = FinanceController();
-
+  StreamSubscription<UserAccelerometerEvent>? _accelerometerSubscription;
+  DateTime _lastRefreshTime = DateTime.now();
   bool _isLoading = true;
   double _income = 0.0;
   double _expense = 0.0;
@@ -42,6 +46,114 @@ class _StatisticScreenState extends State<StatisticScreen> {
   void initState() {
     super.initState();
     _loadStatisticData();
+    _initAccelerometer();
+  }
+
+  @override
+  void dispose() {
+    _accelerometerSubscription?.cancel(); // Matikan sensor saat keluar
+    super.dispose();
+  }
+
+  void _initAccelerometer() {
+    _accelerometerSubscription = userAccelerometerEventStream().listen((
+      UserAccelerometerEvent event,
+    ) {
+      double acceleration = sqrt(
+        pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2),
+      );
+      if (acceleration > 15) {
+        final now = DateTime.now();
+        if (now.difference(_lastRefreshTime).inSeconds > 3) {
+          _lastRefreshTime = now;
+          if (mounted) {
+            // Sembunyikan snackbar yang lama agar tidak menumpuk jika digoyang berkali-kali
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                elevation: 0,
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: Colors
+                    .transparent, // Dibuat transparan agar bisa pakai custom Container
+                margin: const EdgeInsets.only(
+                  bottom: 90,
+                  left: 20,
+                  right: 20,
+                ), // Pas di atas Floating Navbar
+                duration: const Duration(milliseconds: 1500), // 1.5 detik
+                content: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E1E), // Tema gelap premium
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF3949AB).withOpacity(0.5),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF3949AB).withOpacity(0.2),
+                        blurRadius: 15,
+                        spreadRadius: 2,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      // Ikon Animasi Putar dengan background bulat
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3949AB).withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.sync_rounded,
+                          color: Color(0xFF8C9EFF),
+                          size: 22,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      // Teks Dua Baris yang Elegan
+                      const Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Sinkronisasi Selesai",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              "Data saldo & transaksi diperbarui",
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+          _loadStatisticData();
+        }
+      }
+    });
   }
 
   Future<void> _loadStatisticData() async {

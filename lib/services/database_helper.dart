@@ -288,6 +288,28 @@ class DatabaseHelper {
       whereArgs: [id],
     );
   }
+
+  // [BARU] Mengambil data user berdasarkan ID
+  Future<Map<String, dynamic>?> getUserById(int id) async {
+    Database db = await instance.database;
+    List<Map<String, dynamic>> result = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return result.isNotEmpty ? result.first : null;
+  }
+
+  // [BARU] Memperbarui password user
+  Future<int> updatePassword(int userId, String newPassword) async {
+    Database db = await instance.database;
+    return await db.update(
+      'users',
+      {'password': newPassword},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
   
   // Menutup database jika aplikasi dimatikan
   Future close() async {
