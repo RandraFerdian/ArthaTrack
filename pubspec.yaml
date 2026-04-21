@@ -11,7 +11,7 @@ dependencies:
     sdk: flutter
   google_fonts: ^8.0.2
   font_awesome_flutter: ^10.4.0
-  fl_chart: ^0.66.0
+  fl_chart: ^1.2.0
   sqflite: ^2.3.0 
   path: ^1.9.0
   http: ^1.2.1 
@@ -24,6 +24,9 @@ dependencies:
   local_auth: ^2.2.0 
   sqflite_common_ffi: ^2.4.0+2
   url_launcher: ^6.3.2
+  google_generative_ai: ^0.4.7
+  flutter_dotenv: ^6.0.0
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:
@@ -32,3 +35,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+      - .env

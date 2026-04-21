@@ -80,4 +80,59 @@ class AuthController {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('username');
   }
-} // <-- Tutup kurung class-nya harus di paling bawah sini
+
+  // [BARU] Logika untuk memperbarui profil user
+  Future<String?> updateUserProfile(String newName, String newBio) async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      int? userId = prefs.getInt('userId');
+
+      if (userId != null) {
+        // 1. Update di Database SQLite agar bisa dipakai Login
+        await DatabaseHelper.instance.updateUser(userId, newName);
+
+        // 2. Update di SharedPreferences untuk tampilan UI
+        await prefs.setString('username', newName);
+        await prefs.setString('userBio', newBio);
+
+        return null; // Sukses
+      }
+      return "Sesi user tidak ditemukan";
+    } catch (e) {
+      return "Gagal memperbarui database: $e";
+    }
+  }
+
+  // [BARU] Ambil Bio/Jurusan
+  Future<String> getUserBio() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('userBio') ?? "-";
+  }
+
+  // ==========================================
+  // LOGIKA FOTO PROFIL
+  // ==========================================
+
+  // Menyimpan lokasi file foto profil ke memori
+  Future<bool> updateProfileImage(String imagePath) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('userId');
+
+    if (userId != null) {
+      // Simpan dengan kunci unik untuk tiap user, misal: profile_image_1
+      return await prefs.setString('profile_image_$userId', imagePath);
+    }
+    return false;
+  }
+
+  // Mengambil lokasi file foto profil
+  Future<String> getUserProfileImage() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('userId');
+
+    if (userId != null) {
+      return prefs.getString('profile_image_$userId') ?? '';
+    }
+    return '';
+  }
+}

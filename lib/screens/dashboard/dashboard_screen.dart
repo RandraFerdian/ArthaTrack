@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:arthatrack/controllers/finance_controller.dart';
 import 'package:arthatrack/screens/transaction/add_transaction_screen.dart';
 import 'package:arthatrack/screens/transaction/currency_conversion_screen.dart';
 import 'package:arthatrack/controllers/currency_controller.dart';
 import 'package:arthatrack/screens/transaction/transaction_history_screen.dart';
 import 'package:arthatrack/controllers/auth_controller.dart';
+import 'package:arthatrack/screens/target/target_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -17,6 +19,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final FinanceController _financeController = FinanceController();
   final CurrencyController _currencyController = CurrencyController();
+  final AuthController _authController = AuthController();
 
   double _totalBalance = 0.0;
   double _displayBalance = 0.0;
@@ -24,9 +27,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _selectedCurrency = 'IDR';
   bool _isLoading = true;
   bool _isConverting = false;
-  String _userName = "User"; // Default jika data belum dimuat
-  final AuthController _authController =
-      AuthController(); // Inisialisasi AuthController
+  String _userName = "User";
 
   StreamSubscription<UserAccelerometerEvent>? _accelerometerSubscription;
   DateTime _lastRefreshTime = DateTime.now();
@@ -73,16 +74,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadDashboardData() async {
     setState(() => _isLoading = true);
     double balance = await _financeController.getTotalBalance();
+
+    // Ambil data transaksi (TIDAK PERLU DI-SORT LAGI karena SQLite sudah melakukan ORDER BY date DESC otomatis)
     List<Map<String, dynamic>> transactions = await _financeController
         .getUserTransactions();
+
     String? name = await _authController.getLoggedInUserName();
+
     setState(() {
       _totalBalance = balance;
       _displayBalance = balance;
       _recentTransactions = transactions;
-      _userName =
-          name ?? "User"; // Gunakan nama dari login atau fallback ke "User"
-      _isLoading = false;
+      _userName = name ?? "User";
+      _isLoading = false; // Sekarang pasti akan tereksekusi
       _selectedCurrency = 'IDR';
     });
   }
@@ -161,6 +165,312 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return "$code $finalAmount";
   }
 
+  // =========================================================
+  // FUNGSI MODAL DETAIL (DITAMBAHKAN AGAR BISA EDIT DI DASHBOARD)
+  // =========================================================
+  void _showTransactionDetail(Map<String, dynamic> trx, String displayAmount) {
+    bool isIncome = trx['type'] == 'income';
+    bool hasLocation = trx['latitude'] != null && trx['longitude'] != null;
+
+    String formattedDate = trx['date'];
+    try {
+      DateTime date = DateTime.parse(trx['date']);
+      List<String> months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'Mei',
+        'Jun',
+        'Jul',
+        'Ags',
+        'Sep',
+        'Okt',
+        'Nov',
+        'Des',
+      ];
+      formattedDate =
+          "${date.day} ${months[date.month - 1]} ${date.year}, ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}";
+    } catch (e) {}
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1E1E1E),
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 32),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: isIncome
+                      ? Colors.green.withOpacity(0.15)
+                      : Colors.redAccent.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isIncome
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded,
+                  color: isIncome ? Colors.green : Colors.redAccent,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                "${isIncome ? '+' : '-'} $displayAmount",
+                style: TextStyle(
+                  color: isIncome ? Colors.green : Colors.redAccent,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                trx['title'],
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
+
+              _buildDetailRow(
+                Icons.category_rounded,
+                "Kategori",
+                trx['category'],
+              ),
+              _buildDetailRow(
+                Icons.calendar_today_rounded,
+                "Tanggal",
+                formattedDate,
+              ),
+              _buildDetailRow(
+                Icons.location_on_rounded,
+                "Lokasi (GPS)",
+                hasLocation
+                    ? "${trx['latitude']}, ${trx['longitude']}"
+                    : "Lokasi tidak tercatat",
+                isLink: hasLocation,
+                onTap: hasLocation
+                    ? () async {
+                        final Uri googleMapsUrl = Uri.parse(
+                          "https://www.google.com/maps/search/?api=1&query=${trx['latitude']}, ${trx['longitude']}",
+                        );
+                        if (await canLaunchUrl(googleMapsUrl))
+                          await launchUrl(
+                            googleMapsUrl,
+                            mode: LaunchMode.externalApplication,
+                          );
+                      }
+                    : null,
+              ),
+
+              const SizedBox(height: 32),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _confirmDelete(trx['id']),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.redAccent,
+                      ),
+                      label: const Text(
+                        "Hapus",
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.redAccent),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context); // Tutup modal
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => AddTransactionScreen(
+                              initialType: trx['type'],
+                              existingTransaction: trx,
+                            ),
+                          ),
+                        ).then(
+                          (_) => _loadDashboardData(),
+                        ); // Refresh Dashboard setelah edit
+                      },
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        color: Colors.white,
+                      ),
+                      label: const Text(
+                        "Edit",
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF00C853),
+                        padding: const EdgeInsets.symmetric(vertical: 15),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2A2A2A),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    "Tutup",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _confirmDelete(int id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text(
+          "Hapus Transaksi?",
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          "Data yang dihapus tidak bisa dikembalikan.",
+          style: TextStyle(color: Colors.grey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Batal", style: TextStyle(color: Colors.white70)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              await _financeController.deleteTransaction(id);
+              _loadDashboardData(); // Refresh Data Dashboard
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Transaksi dihapus")),
+              );
+            },
+            child: const Text(
+              "Hapus",
+              style: TextStyle(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(
+    IconData icon,
+    String label,
+    String value, {
+    bool isLink = false,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 20, top: 4, left: 4, right: 4),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2A2A2A),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: Colors.grey, size: 20),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      value,
+                      style: TextStyle(
+                        color: isLink ? const Color(0xFF00C853) : Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        decoration: isLink
+                            ? TextDecoration.underline
+                            : TextDecoration.none,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  // =========================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -171,7 +481,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               "Selamat Datang,",
               style: TextStyle(color: Colors.grey, fontSize: 14),
             ),
@@ -204,7 +514,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 1. KARTU SALDO
+                    // KARTU SALDO
                     GestureDetector(
                       onTap: _showCurrencySelector,
                       child: Container(
@@ -260,7 +570,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // 2. MENU CEPAT (FIXED GAP)
+                    // MENU CEPAT
                     const Text(
                       "Menu Cepat",
                       style: TextStyle(
@@ -276,8 +586,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisCount: 4,
                       mainAxisSpacing: 12,
                       crossAxisSpacing: 10,
-                      childAspectRatio:
-                          0.9, // Diperbaiki agar tidak ada gap kosong di dalam cell
+                      childAspectRatio: 0.9,
                       children: [
                         _buildActionButton(
                           Icons.add_circle_outline_rounded,
@@ -304,10 +613,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           "maps",
                         ),
                         _buildActionButton(
-                          Icons.auto_awesome_rounded,
-                          "Tanya AI",
+                          Icons.cloud_sync_rounded,
+                          "Cloud Sync",
                           Colors.blue,
-                          "chat_ai",
+                          "sync",
                         ),
                         _buildActionButton(
                           Icons.track_changes_rounded,
@@ -329,10 +638,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(
-                      height: 10,
-                    ), // Dikurangi agar jarak ke bawah lebih rapat
-                    // 3. TRANSAKSI TERBARU
+                    const SizedBox(height: 10),
+
+                    // TRANSAKSI TERBARU
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -348,9 +656,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => TransactionHistoryScreen(),
+                              builder: (context) =>
+                                  const TransactionHistoryScreen(),
                             ),
-                          ),
+                          ).then((_) => _loadDashboardData()),
                           child: const Text(
                             "Lihat Semua",
                             style: TextStyle(
@@ -392,11 +701,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(16),
-                                  onTap: () => showTransactionDetail(
-                                    context,
-                                    trx,
-                                    amountStr,
-                                  ),
+                                  // [DIPERBAIKI] Memanggil _showTransactionDetail yang baru kita tambahkan
+                                  onTap: () =>
+                                      _showTransactionDetail(trx, amountStr),
                                   child: Padding(
                                     padding: const EdgeInsets.all(12.0),
                                     child: Row(
@@ -494,6 +801,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => CurrencyConversionScreen()),
+          );
+        } else if (actionId == "target") {
+          // [DIPERBAIKI] Sekarang tombol Target langsung membuka TargetScreen
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const TargetScreen()),
           );
         } else {
           ScaffoldMessenger.of(context).showSnackBar(

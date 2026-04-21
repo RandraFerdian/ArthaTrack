@@ -1,3 +1,4 @@
+import 'package:arthatrack/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:arthatrack/controllers/auth_controller.dart';
 import 'package:arthatrack/screens/dashboard/dashboard_screen.dart';
@@ -51,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _showMessage("Selamat Datang, $username!");
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => DashboardScreen()),
+          MaterialPageRoute(builder: (context) => MainScreen()),
         );
       } else {
         _showMessage("Registrasi Berhasil! Silakan Login.");
@@ -74,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showMessage("Login Biometrik Berhasil!");
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => DashboardScreen()),
+        MaterialPageRoute(builder: (context) => MainScreen()),
       );
     } else {
       _showMessage(errorMessage);

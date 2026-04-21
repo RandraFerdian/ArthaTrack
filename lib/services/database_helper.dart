@@ -154,6 +154,15 @@ class DatabaseHelper {
     }
     return false;
   }
+  Future<int> updateUser(int id, String newUsername) async {
+    Database db = await instance.database;
+    return await db.update(
+      'users',
+      {'username': newUsername},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
 
   // ==========================================
   // BAGIAN TRANSAKSI (PEMASUKAN & PENGELUARAN)
@@ -185,19 +194,27 @@ class DatabaseHelper {
     );
   }
 
-  // 4. Hitung Total Saldo 
+  // 4. Hitung Total Saldo
   Future<double> calculateTotalBalance(int userId) async {
     final db = await instance.database;
+
     var incomeResult = await db.rawQuery(
       "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'income'",
       [userId],
     );
-    double income = (incomeResult.first['total'] ?? 0.0) as double;
+    // [DIPERBAIKI] Menggunakan .toDouble() agar aman dari error tipe data
+    double income = (incomeResult.first['total'] != null)
+        ? (incomeResult.first['total'] as num).toDouble()
+        : 0.0;
+
     var expenseResult = await db.rawQuery(
       "SELECT SUM(amount) as total FROM transactions WHERE user_id = ? AND type = 'expense'",
       [userId],
     );
-    double expense = (expenseResult.first['total'] ?? 0.0) as double;
+    // [DIPERBAIKI] Menggunakan .toDouble() agar aman
+    double expense = (expenseResult.first['total'] != null)
+        ? (expenseResult.first['total'] as num).toDouble()
+        : 0.0;
 
     return income - expense;
   }
@@ -210,6 +227,7 @@ class DatabaseHelper {
     final db = await instance.database;
     return await db.insert('savings_goals', goalData);
   }
+
   // 2. Ambil Semua Target Tabungan User (Read)
   Future<List<Map<String, dynamic>>> getSavingsGoalsByUser(int userId) async {
     final db = await instance.database;
@@ -219,6 +237,7 @@ class DatabaseHelper {
       whereArgs: [userId],
     );
   }
+
   // 3. Tambah Uang ke Target Tabungan (Update Progress)
   Future<int> addMoneyToGoal(int goalId, double amountToAdd) async {
     final db = await instance.database;
@@ -242,6 +261,34 @@ class DatabaseHelper {
     );
   }
 
+  Future<int> updateTransaction(
+    int id,
+    Map<String, dynamic> transactionData,
+  ) async {
+    Database db = await instance.database; // Ambil koneksi database
+
+    // Melakukan update ke tabel 'transactions' di mana 'id' cocok
+    return await db.update(
+      'transactions', // Pastikan nama tabel ini sama dengan nama tabel kamu (biasanya 'transactions')
+      transactionData,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // ==========================================
+  // FUNGSI CRUD TARGET TABUNGAN (SAVINGS GOALS)
+  // ==========================================
+  Future<int> updateSavingsGoal(int id, Map<String, dynamic> data) async {
+    Database db = await instance.database;
+    return await db.update(
+      'savings_goals',
+      data,
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  
   // Menutup database jika aplikasi dimatikan
   Future close() async {
     final db = await instance.database;

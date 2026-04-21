@@ -4,10 +4,12 @@ import 'package:arthatrack/screens/auth/login_screen.dart';
 import 'package:arthatrack/screens/dashboard/dashboard_screen.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:arthatrack/main_screen.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   // 1. Wajib ditambahkan jika kita menggunakan fungsi async (seperti SharedPreferences) sebelum runApp
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
 
   // 2. Cek apakah ada session yang tersimpan
   SharedPreferences prefs = await SharedPreferences.getInstance();

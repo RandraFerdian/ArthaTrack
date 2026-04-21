@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:arthatrack/screens/dashboard/dashboard_screen.dart';
-import 'package:arthatrack/screens/transaction/transaction_history_screen.dart'; // Bisa digunakan untuk Statistik sementara
+import 'package:arthatrack/screens/statistic/statistic_screen.dart';
+import 'package:arthatrack/screens/profile/profile_screen.dart';
+import 'package:arthatrack/screens/target/target_screen.dart';
+import 'package:arthatrack/screens/chat/chat_screen.dart';
+import 
 // Import halaman lainnya nanti (Chat AI, Target, Profil)
 
 class MainScreen extends StatefulWidget {
@@ -16,18 +20,10 @@ class _MainScreenState extends State<MainScreen> {
   // Daftar halaman sesuai urutan menu
   final List<Widget> _pages = [
     DashboardScreen(),
-    const Center(
-      child: Text("Halaman Statistik"),
-    ), // Ganti dengan Screen Statistik nanti
-    const Center(
-      child: Text("Halaman Chat AI"),
-    ), // Ganti dengan Screen Chat AI nanti
-    const Center(
-      child: Text("Halaman Target"),
-    ), // Ganti dengan Screen Target nanti
-    const Center(
-      child: Text("Halaman Profil"),
-    ), // Ganti dengan Screen Profil nanti
+    StatisticScreen(),
+    const ChatScreen(),
+    const TargetScreen(),
+    const ProfileScreen(),
   ];
 
   @override
@@ -110,7 +106,7 @@ class _MainScreenState extends State<MainScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     )
-                  : const SizedBox.shrink(), 
+                  : const SizedBox.shrink(),
             ),
           ],
         ),
