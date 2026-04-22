@@ -1,7 +1,8 @@
 import 'package:arthatrack/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:arthatrack/controllers/auth_controller.dart';
-import 'package:arthatrack/screens/dashboard/dashboard_screen.dart';
+import 'package:arthatrack/services/database_helper.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -16,6 +17,54 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true;
   bool _isLoading = false;
   bool _obscurePassword = true;
+  bool _isBiometricVisible = false; // Flag untuk memunculkan tombol sidik jari
+
+  @override
+  void initState() {
+    super.initState();
+    // [BARU] Memasang pendengar setiap kali user mengetik di kolom username
+    _usernameController.addListener(_checkUserBiometricStatus);
+    _loadLastUsername();
+  }
+
+  Future<void> _loadLastUsername() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? lastUser = prefs.getString('last_username');
+
+    if (lastUser != null && lastUser.isNotEmpty) {
+      _usernameController.text = lastUser;
+    }
+  }
+
+  void _checkUserBiometricStatus() async {
+    String username = _usernameController.text.trim();
+    if (username.isNotEmpty) {
+      // [DIUBAH] Gunakan pengecekan berdasarkan 'username', BUKAN 'userId'
+      bool isEnabled =
+          await DatabaseHelper.instance.checkBiometricByUsername(username);
+
+      if (mounted) {
+        setState(() {
+          _isBiometricVisible = isEnabled;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isBiometricVisible = false;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    // Wajib dihapus agar memori tidak bocor
+    _usernameController.removeListener(_checkUserBiometricStatus);
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   // Fungsi untuk menampilkan pop-up pesan
   void _showMessage(String msg) {
@@ -35,7 +84,6 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    // Panggil logika dari AuthController
     String? errorMessage;
     if (_isLogin) {
       errorMessage = await _authController.login(username, password);
@@ -43,16 +91,16 @@ class _LoginScreenState extends State<LoginScreen> {
       errorMessage = await _authController.register(username, password);
     }
 
-    // Tanggapan dari logika (Output)
     setState(() => _isLoading = false);
 
     if (errorMessage == null) {
-      // Jika null berarti SUKSES
       if (_isLogin) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.setString('last_username', username);
         _showMessage("Selamat Datang, $username!");
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => MainScreen()),
+          MaterialPageRoute(builder: (context) => const MainScreen()),
         );
       } else {
         _showMessage("Registrasi Berhasil! Silakan Login.");
@@ -62,7 +110,6 @@ class _LoginScreenState extends State<LoginScreen> {
         });
       }
     } else {
-      // Jika ada isi pesannya berarti ERROR
       _showMessage(errorMessage);
     }
   }
@@ -75,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _showMessage("Login Biometrik Berhasil!");
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => MainScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } else {
       _showMessage(errorMessage);
@@ -84,7 +131,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Menggunakan tema gelap sesuai kesepakatan
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
       body: Center(
@@ -93,7 +139,6 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo atau Icon Aplikasi
               const Icon(
                 Icons.account_balance_wallet,
                 size: 80,
@@ -169,7 +214,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _handleSubmit,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00C853), // Accent Green
+                    backgroundColor: const Color(0xFF00C853),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -188,13 +233,25 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 24),
 
-              // Tombol Biometrik (Hanya muncul saat Login)
-              if (_isLogin)
-                IconButton(
-                  iconSize: 50,
-                  icon: const Icon(Icons.fingerprint, color: Color(0xFF00C853)),
-                  onPressed: _handleBiometric,
-                ),
+              // [DIPERBAIKI] Tombol Biometrik dengan Animasi Kemunculan
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  return FadeTransition(
+                    opacity: animation,
+                    child: ScaleTransition(scale: animation, child: child),
+                  );
+                },
+                child: (_isLogin && _isBiometricVisible)
+                    ? IconButton(
+                        key: const ValueKey('biometric_btn'),
+                        iconSize: 50,
+                        icon: const Icon(Icons.fingerprint,
+                            color: Color(0xFF00C853)),
+                        onPressed: _handleBiometric,
+                      )
+                    : const SizedBox.shrink(key: ValueKey('empty_space')),
+              ),
 
               // Toggle Mode Login/Register
               TextButton(

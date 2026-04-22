@@ -44,22 +44,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _initAccelerometer();
   }
 
-  void _initAccelerometer() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool isAccelEnabled = prefs.getBool('accel_enabled') ?? true;
+  void _initAccelerometer() {
+    _accelerometerSubscription = userAccelerometerEventStream()
+        .listen((UserAccelerometerEvent event) async {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool isAccelEnabled = prefs.getBool('accel_enabled') ?? true;
+      if (!isAccelEnabled) return;
 
-    if (!isAccelEnabled) return;
-    _accelerometerSubscription = userAccelerometerEventStream().listen((
-      UserAccelerometerEvent event,
-    ) {
       double acceleration = sqrt(
         pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2),
       );
+
       if (acceleration > 15) {
         final now = DateTime.now();
         if (now.difference(_lastRefreshTime).inSeconds > 3) {
           _lastRefreshTime = now;
           if (mounted) {
+            // Tampilkan notifikasi sinkronisasi
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -75,31 +76,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: const Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: const Color(0xFF3949AB).withOpacity(0.5),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF3949AB).withOpacity(0.2),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
+                        color: const Color(0xFF3949AB).withOpacity(0.5),
+                        width: 1.5),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3949AB).withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.sync_rounded,
-                            color: Color(0xFF8C9EFF), size: 22),
-                      ),
-                      const SizedBox(width: 16),
-                      const Expanded(
+                      Icon(Icons.sync_rounded,
+                          color: Color(0xFF8C9EFF), size: 22),
+                      SizedBox(width: 12),
+                      Expanded(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -109,10 +94,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14)),
-                            SizedBox(height: 2),
-                            Text("Data saldo & transaksi diperbarui",
-                                style: TextStyle(
-                                    color: Colors.grey, fontSize: 12)),
+                            Text(
+                              "Data saldo & transaksi diperbarui",
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 12),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
                       ),

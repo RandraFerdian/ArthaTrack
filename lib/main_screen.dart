@@ -5,11 +5,10 @@ import 'package:arthatrack/screens/profile/profile_screen.dart';
 import 'package:arthatrack/screens/target/target_screen.dart';
 import 'package:arthatrack/screens/chat/chat_screen.dart';
 import 'dart:io';
-import 'package:arthatrack/controllers/auth_controller.dart';
-// [BARU] Import untuk Gyroscope dan Timer
 import 'dart:async';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:arthatrack/services/database_helper.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -20,76 +19,68 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
-  final AuthController _authController = AuthController();
-  String _profileImagePath = ""; // Menyimpan lokasi foto profil untuk Navbar
+  String _profileImagePath = "";
 
-  // [BARU] Variabel untuk Gyroscope Sensor
   StreamSubscription<GyroscopeEvent>? _gyroSubscription;
   DateTime _lastTiltTime = DateTime.now();
 
-  final List<Widget> _pages = [
-    DashboardScreen(),
-    StatisticScreen(),
-    const ChatScreen(),
-    const TargetScreen(),
-    const ProfileScreen(),
-  ];
+  // [DIUBAH] Dijadikan 'late' agar kita bisa memasukkan fungsi _loadProfileImage
+  late List<Widget> _pages;
 
   @override
   void initState() {
     super.initState();
+    // Inisialisasi daftar halaman dan berikan walkie-talkie ke ProfileScreen
+    _pages = [
+      DashboardScreen(),
+      StatisticScreen(),
+      const ChatScreen(),
+      const TargetScreen(),
+      ProfileScreen(
+          onProfileUpdated: _loadProfileImage), // [BARU] Jalur Sinkronisasi
+    ];
+
     _loadProfileImage();
-    _initGyroscopeNavigation(); // [BARU] Panggil sensor saat aplikasi dibuka
+    _initGyroscopeNavigation();
   }
 
-  // [BARU] Fungsi Logika Sensor Gyroscope
-  void _initGyroscopeNavigation() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool isGyroEnabled = prefs.getBool('gyro_enabled') ?? true;
-    if (!isGyroEnabled) return;
-    _gyroSubscription = gyroscopeEventStream().listen((GyroscopeEvent event) {
-      final now = DateTime.now();
+  void _initGyroscopeNavigation() {
+    _gyroSubscription =
+        gyroscopeEventStream().listen((GyroscopeEvent event) async {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool isGyroEnabled = prefs.getBool('gyro_enabled') ?? true;
+      if (!isGyroEnabled) return;
 
-      // COOLDOWN 1 DETIK: Cegah layar melompat-lompat terlalu cepat
+      final now = DateTime.now();
       if (now.difference(_lastTiltTime).inMilliseconds > 1000) {
-        // Memiringkan/memutar pergelangan tangan ke KANAN (event.y > 2.5)
-        if (event.y > 2.5) {
-          if (_currentIndex < 4) {
-            // 4 adalah batas akhir (Profil)
-            setState(() {
-              _currentIndex++;
-            });
-            _lastTiltTime = now;
-            _loadProfileImage(); // Sinkronkan foto profil
-          }
-        }
-        // Memiringkan/memutar pergelangan tangan ke KIRI (event.y < -2.5)
-        else if (event.y < -2.5) {
-          if (_currentIndex > 0) {
-            // 0 adalah batas awal (Home)
-            setState(() {
-              _currentIndex--;
-            });
-            _lastTiltTime = now;
-            _loadProfileImage(); // Sinkronkan foto profil
-          }
+        if (event.y > 2.5 && _currentIndex < 4) {
+          setState(() => _currentIndex++);
+          _lastTiltTime = now;
+          _loadProfileImage();
+        } else if (event.y < -2.5 && _currentIndex > 0) {
+          setState(() => _currentIndex--);
+          _lastTiltTime = now;
+          _loadProfileImage();
         }
       }
     });
   }
 
-
-  // Mengambil foto profil untuk Navbar
+  // [DIPERBAIKI] Mengambil foto langsung dari Database SQLite (Sama seperti ProfileScreen)
   Future<void> _loadProfileImage() async {
-    String imagePath = await _authController.getUserProfileImage();
-    if (mounted) {
-      setState(() {
-        _profileImagePath = imagePath;
-      });
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('userId');
+
+    if (userId != null) {
+      final userData = await DatabaseHelper.instance.getUserById(userId);
+      if (userData != null && mounted) {
+        setState(() {
+          _profileImagePath = userData['profile_image'] ?? "";
+        });
+      }
     }
   }
 
-  // [BARU] Wajib matikan sensor saat halaman ditutup agar baterai tidak boros
   @override
   void dispose() {
     _gyroSubscription?.cancel();
@@ -134,20 +125,18 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  Widget _buildNavItem(
-    IconData icon,
-    String label,
-    int index, {
-    bool isProfile = false,
-  }) {
+  Widget _buildNavItem(IconData icon, String label, int index,
+      {bool isProfile = false}) {
     bool isSelected = _currentIndex == index;
     Color activeColor = const Color(0xFF00C853);
+
+    // [BARU] Pengecekan Aman: Apakah string tidak kosong DAN file aslinya benar-benar ada di HP?
+    bool hasValidImage =
+        _profileImagePath.isNotEmpty && File(_profileImagePath).existsSync();
 
     return GestureDetector(
       onTap: () async {
         setState(() => _currentIndex = index);
-        // Selalu muat ulang foto profil saat menu diklik agar otomatis ter-update
-        // jika pengguna baru saja mengganti foto di dalam menu Profil
         _loadProfileImage();
       },
       behavior: HitTestBehavior.opaque,
@@ -161,8 +150,8 @@ class _MainScreenState extends State<MainScreen> {
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeOut,
               margin: EdgeInsets.only(bottom: isSelected ? 4 : 0),
-              child: isProfile && _profileImagePath.isNotEmpty
-                  // Tampilkan Foto Profil jika ada di tab Profil
+              child: (isProfile && hasValidImage)
+                  // Tampilkan Foto Profil jika kondisinya Valid
                   ? Container(
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
@@ -171,11 +160,12 @@ class _MainScreenState extends State<MainScreen> {
                             : null,
                       ),
                       child: CircleAvatar(
-                        radius: 13, // Menyesuaikan ukuran Icon size 26
+                        radius: 13,
+                        backgroundColor: Colors.transparent,
                         backgroundImage: FileImage(File(_profileImagePath)),
                       ),
                     )
-                  // Tampilkan Ikon Biasa
+                  // Tampilkan Ikon Default jika kosong atau error
                   : Icon(
                       icon,
                       color: isSelected ? activeColor : Colors.grey,
@@ -186,14 +176,11 @@ class _MainScreenState extends State<MainScreen> {
               duration: const Duration(milliseconds: 200),
               opacity: isSelected ? 1.0 : 0.0,
               child: isSelected
-                  ? Text(
-                      label,
+                  ? Text(label,
                       style: TextStyle(
-                        color: activeColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    )
+                          color: activeColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold))
                   : const SizedBox.shrink(),
             ),
           ],

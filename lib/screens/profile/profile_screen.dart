@@ -6,11 +6,13 @@ import 'package:arthatrack/screens/profile/edit_profile_screen.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:arthatrack/screens/profile/change_password_screen.dart';
-// [BARU] Import Database Helper untuk menyimpan Feedback
 import 'package:arthatrack/services/database_helper.dart';
+import 'package:arthatrack/screens/profile/feedback_screen.dart';
+import 'package:arthatrack/services/notification_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.onProfileUpdated});
+  final VoidCallback? onProfileUpdated; 
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -22,11 +24,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _userName = "Memuat...";
   String _userBio = "Memuat...";
   String _profileImagePath = "";
-
   bool _isBiometricEnabled = true;
   bool _isNotificationEnabled = true;
-
-  // [BARU] State untuk Pengaturan Sensor
   bool _isGyroEnabled = true;
   bool _isAccelEnabled = true;
 
@@ -34,135 +33,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
-    _loadPreferences(); // Load status sensor
+    _loadPreferences(); 
   }
 
   Future<void> _loadUserData() async {
-    String? name = await _authController.getLoggedInUserName();
-    String bio = await _authController.getUserBio();
-    String imagePath = await _authController.getUserProfileImage();
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('userId');
 
-    setState(() {
-      _userName = name ?? "-";
-      _userBio = bio;
-      _profileImagePath = imagePath;
-    });
+    if (userId != null) {
+      final userData = await DatabaseHelper.instance.getUserById(userId);
+
+      if (userData != null) {
+        String name = userData['username'] ?? "User";
+        String bio = userData['bio'] ?? "Belum ada bio";
+        String imagePath = userData['profile_image'] ?? "";
+
+        if (mounted) {
+          setState(() {
+            _userName = name;
+            _userBio = bio;
+            _profileImagePath = imagePath;
+          });
+        }
+      }
+    }
   }
 
-  // [BARU] Fungsi mengambil status pengaturan sensor dari memori HP
   Future<void> _loadPreferences() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('userId');
+    bool bioStatus = false;
+    if (userId != null) {
+      bioStatus = await DatabaseHelper.instance.isBiometricEnabled(userId);
+    }
+
     setState(() {
       _isGyroEnabled = prefs.getBool('gyro_enabled') ?? true;
       _isAccelEnabled = prefs.getBool('accel_enabled') ?? true;
+      _isNotificationEnabled = prefs.getBool('notification_enabled') ?? true;
+      _isBiometricEnabled = bioStatus;
     });
   }
 
-  // [BARU] Fungsi menyimpan perubahan toggle Gyroscope
+  Future<void> _toggleBiometric(bool value) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('userId');
+    if (userId != null) {
+      await DatabaseHelper.instance.updateBiometricStatus(userId, value);
+    }
+    setState(() => _isBiometricEnabled = value);
+  }
+
+  Future<void> _toggleNotification(bool value) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('notification_enabled', value);
+    setState(() => _isNotificationEnabled = value);
+
+    if (value == true) {
+      await NotificationHelper.scheduleDailyReminder();
+    } else {
+      await NotificationHelper.cancelReminder();
+    }
+  }
+
   Future<void> _toggleGyro(bool value) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setBool('gyro_enabled', value);
     setState(() => _isGyroEnabled = value);
   }
 
-  // [BARU] Fungsi menyimpan perubahan toggle Accelerometer
   Future<void> _toggleAccel(bool value) async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setBool('accel_enabled', value);
     setState(() => _isAccelEnabled = value);
-  }
-
-  // [BARU] Fungsi memunculkan form Feedback Matkul Mobile
-  void _showFeedbackDialog() {
-    final TextEditingController kesanController = TextEditingController();
-    final TextEditingController saranController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text("Feedback Matkul Mobile",
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-                "Silakan berikan kesan dan saran Anda terkait proyek dan mata kuliah ini.",
-                style: TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: kesanController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: "Kesan",
-                labelStyle: const TextStyle(color: Colors.white54),
-                enabledBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Colors.white24),
-                    borderRadius: BorderRadius.circular(12)),
-                focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF00C853)),
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              maxLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: saranController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                labelText: "Saran",
-                labelStyle: const TextStyle(color: Colors.white54),
-                enabledBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Colors.white24),
-                    borderRadius: BorderRadius.circular(12)),
-                focusedBorder: OutlineInputBorder(
-                    borderSide: const BorderSide(color: Color(0xFF00C853)),
-                    borderRadius: BorderRadius.circular(12)),
-              ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Batal", style: TextStyle(color: Colors.white70)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (kesanController.text.isEmpty ||
-                  saranController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Harap isi Kesan dan Saran")));
-                return;
-              }
-              // Simpan ke tabel tpm_feedback di SQLite
-              SharedPreferences prefs = await SharedPreferences.getInstance();
-              int? userId = prefs.getInt('userId');
-              if (userId != null) {
-                final db = await DatabaseHelper.instance.database;
-                await db.insert('tpm_feedback', {
-                  'user_id': userId,
-                  'kesan': kesanController.text,
-                  'saran': saranController.text,
-                });
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content:
-                          Text("Feedback berhasil dikirim! Terima kasih.")));
-                  Navigator.pop(ctx);
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00C853)),
-            child: const Text("Kirim",
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _handleLogout() {
@@ -199,12 +142,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _pickImage() async {
+Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       await _authController.updateProfileImage(image.path);
       setState(() => _profileImagePath = image.path);
+      widget.onProfileUpdated?.call();
     }
   }
 
@@ -314,6 +258,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   currentName: _userName,
                                   currentBio: _userBio)));
                       if (updated == true) _loadUserData();
+                      widget.onProfileUpdated?.call();
                     },
                   ),
                 ],
@@ -338,8 +283,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     trailing: Switch(
                         value: _isBiometricEnabled,
                         activeColor: const Color(0xFF00C853),
-                        onChanged: (val) =>
-                            setState(() => _isBiometricEnabled = val))),
+                        onChanged: _toggleBiometric)),
                 _buildDivider(),
                 _buildSettingsTile(
                     icon: Icons.lock_outline_rounded,
@@ -355,7 +299,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: 24),
 
-            // --- 3. EVALUASI & FEEDBACK (PENGGANTI DATA & SINKRONISASI) ---
+            // --- 3. EVALUASI & FEEDBACK  ---
             const Text("Evaluasi Proyek",
                 style: TextStyle(
                     color: Colors.white,
@@ -370,7 +314,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title: "Feedback Matkul Mobile",
                   subtitle: "Berikan kesan & saran untuk TPM",
                   isAction: true,
-                  onTap: _showFeedbackDialog,
+                  // [DIUBAH] Mengarahkan ke layar baru
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const FeedbackScreen(),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -392,11 +344,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   trailing: Switch(
                       value: _isNotificationEnabled,
                       activeColor: const Color(0xFF00C853),
-                      onChanged: (val) =>
-                          setState(() => _isNotificationEnabled = val)),
+                      onChanged: _toggleNotification),
                 ),
                 _buildDivider(),
-                // [BARU] Toggle Gyroscope
+
                 _buildSettingsTile(
                   icon: Icons.screen_rotation_rounded,
                   iconColor: Colors.cyanAccent,

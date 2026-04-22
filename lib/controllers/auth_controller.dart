@@ -75,31 +75,44 @@ class AuthController {
     await prefs.setString('username', username);
   }
 
-  // 5. [DIPERBAIKI] Logika Mengambil Nama User (Sekarang di DALAM class)
+  // 5. Logika Mengambil Nama User
   Future<String?> getLoggedInUserName() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('username');
   }
 
-  // [BARU] Logika untuk memperbarui profil user
+  // Logika untuk memperbarui profil user
   Future<String?> updateUserProfile(String newName, String newBio) async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       int? userId = prefs.getInt('userId');
 
       if (userId != null) {
-        // 1. Update di Database SQLite agar bisa dipakai Login
-        await DatabaseHelper.instance.updateUser(userId, newName);
+        // [WAJIB ADA] Simpan ke Database!
+        await DatabaseHelper.instance
+            .updateUserProfile(userId, newName, newBio);
 
-        // 2. Update di SharedPreferences untuk tampilan UI
+        // (Opsional) Boleh tetap disimpan di SharedPreferences juga jika mau
         await prefs.setString('username', newName);
-        await prefs.setString('userBio', newBio);
+        await prefs.setString('user_bio', newBio);
 
-        return null; // Sukses
+        return null; // Sukses, tidak ada error
       }
-      return "Sesi user tidak ditemukan";
+      return "User ID tidak ditemukan";
     } catch (e) {
-      return "Gagal memperbarui database: $e";
+      // Jika terjadi error (misalnya username sudah dipakai orang lain)
+      return "Gagal menyimpan: Username mungkin sudah digunakan.";
+    }
+  }
+
+  // --- CARI FUNGSI INI JUGA ---
+  Future<void> updateProfileImage(String imagePath) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    int? userId = prefs.getInt('userId');
+
+    if (userId != null) {
+      // [WAJIB ADA] Simpan ke Database!
+      await DatabaseHelper.instance.updateProfileImage(userId, imagePath);
     }
   }
 
@@ -123,7 +136,7 @@ class AuthController {
 
       // 3. Jika benar, update dengan password baru
       await DatabaseHelper.instance.updatePassword(userId, newPassword);
-      return null; // Mengembalikan null berarti sukses
+      return null;
     } catch (e) {
       return "Terjadi kesalahan sistem: $e";
     }
@@ -133,22 +146,6 @@ class AuthController {
   Future<String> getUserBio() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('userBio') ?? "-";
-  }
-
-  // ==========================================
-  // LOGIKA FOTO PROFIL
-  // ==========================================
-
-  // Menyimpan lokasi file foto profil ke memori
-  Future<bool> updateProfileImage(String imagePath) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('userId');
-
-    if (userId != null) {
-      // Simpan dengan kunci unik untuk tiap user, misal: profile_image_1
-      return await prefs.setString('profile_image_$userId', imagePath);
-    }
-    return false;
   }
 
   // Mengambil lokasi file foto profil

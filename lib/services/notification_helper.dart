@@ -42,14 +42,13 @@ class NotificationHelper {
   }) async {
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
-      'arthatrack_channel_id', // ID Channel
-      'ArthaTrack Notifications', // Nama Channel
+      'arthatrack_channel_id',
+      'ArthaTrack Notifications',
       channelDescription: 'Notifikasi untuk aktivitas transaksi ArthaTrack',
       importance: Importance.max,
       priority: Priority.high,
       ticker: 'ticker',
-      color: Color(
-          0xFF00C853), // [DIPERBAIKI] Typo dihapus (sebelumnya Colors jadi Color)
+      color: Color(0xFF00C853),
       icon: '@mipmap/ic_launcher',
     );
 
@@ -64,5 +63,38 @@ class NotificationHelper {
       body: body,
       notificationDetails: platformDetails,
     );
+  }
+
+  static Future<void> scheduleDailyReminder() async {
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'daily_reminder_channel',
+      'Pengingat Harian',
+      channelDescription: 'Mengingatkan user untuk mencatat keuangan',
+      importance: Importance.max,
+      priority: Priority.high,
+      color: Color(0xFF00C853),
+      icon: '@mipmap/ic_launcher',
+    );
+
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: androidDetails,
+    );
+
+    // [DIPERBAIKI] Menggunakan Named Parameters sesuai aturan versi terbaru
+    await _notificationsPlugin.periodicallyShow(
+      id: 888, // Wajib pakai "id:"
+      title: 'Waktunya Catat Keuangan! 💸',
+      body: 'Jangan sampai ada pengeluaran yang terlewat. Yuk catat sekarang!',
+      repeatInterval: RepeatInterval.daily,
+      notificationDetails: platformDetails,
+      androidScheduleMode: AndroidScheduleMode.inexact,
+    );
+  }
+
+  // [BARU] Fungsi untuk mematikan/membatalkan pengingat
+  static Future<void> cancelReminder() async {
+    // [DIPERBAIKI] Menggunakan Named Parameters
+    await _notificationsPlugin.cancel(id: 888);
   }
 }

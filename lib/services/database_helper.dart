@@ -46,7 +46,9 @@ class DatabaseHelper {
         id $idType,
         username $textType UNIQUE,
         password $textType,
-        biometric_enabled INTEGER NOT NULL DEFAULT 0
+        biometric_enabled INTEGER NOT NULL DEFAULT 0,
+        bio TEXT DEFAULT 'Belum ada bio',
+        profile_image TEXT DEFAULT ''
       )
     ''');
 
@@ -154,11 +156,26 @@ class DatabaseHelper {
     }
     return false;
   }
-  Future<int> updateUser(int id, String newUsername) async {
+
+Future<int> updateUserProfile(
+      int id, String newUsername, String newBio) async {
     Database db = await instance.database;
     return await db.update(
       'users',
-      {'username': newUsername},
+      {
+        'username': newUsername,
+        'bio': newBio // Memasukkan bio ke database
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> updateProfileImage(int id, String imagePath) async {
+    Database db = await instance.database;
+    return await db.update(
+      'users',
+      {'profile_image': imagePath}, // Memasukkan foto ke database
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -310,10 +327,74 @@ class DatabaseHelper {
       whereArgs: [userId],
     );
   }
-  
+
   // Menutup database jika aplikasi dimatikan
   Future close() async {
     final db = await instance.database;
     db.close();
+  }
+
+  Future<int> addFeedback(Map<String, dynamic> feedbackData) async {
+    final db = await instance.database;
+    return await db.insert('tpm_feedback', feedbackData);
+  }
+
+  // 2. Ambil Riwayat Feedback Berdasarkan User ID
+  Future<List<Map<String, dynamic>>> getFeedbackByUser(int userId) async {
+    final db = await instance.database;
+    return await db.query(
+      'tpm_feedback',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'id DESC',
+    );
+  }
+
+  // 3. Update Feedback (U)
+  Future<int> updateFeedback(int id, String kesanBaru, String saranBaru) async {
+    final db = await instance.database;
+    return await db.update(
+      'tpm_feedback',
+      {'kesan': kesanBaru, 'saran': saranBaru},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // 4. Delete Feedback (D)
+  Future<int> deleteFeedback(int id) async {
+    final db = await instance.database;
+    return await db.delete(
+      'tpm_feedback',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<int> updateBiometricStatus(int userId, bool isEnabled) async {
+    Database db = await instance.database;
+    return await db.update(
+      'users',
+      {'biometric_enabled': isEnabled ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  // [BARU] Mengecek status biometrik berdasarkan username (Untuk Layar Login)
+  Future<bool> checkBiometricByUsername(String username) async {
+    final db = await instance.database;
+    final res = await db.query(
+      'users',
+      columns: ['biometric_enabled'],
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+
+    if (res.isNotEmpty) {
+      // Mengembalikan true jika biometrik bernilai 1 (On)
+      return res.first['biometric_enabled'] == 1;
+    }
+    return false; // Kembalikan false jika user tidak ditemukan
   }
 }

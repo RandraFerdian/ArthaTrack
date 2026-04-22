@@ -5,6 +5,7 @@ import 'package:arthatrack/screens/transaction/transaction_history_screen.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'dart:math';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class StatisticScreen extends StatefulWidget {
   const StatisticScreen({super.key});
@@ -51,95 +52,67 @@ class _StatisticScreenState extends State<StatisticScreen> {
 
   @override
   void dispose() {
-    _accelerometerSubscription?.cancel(); // Matikan sensor saat keluar
+    _accelerometerSubscription?.cancel(); 
     super.dispose();
   }
 
   void _initAccelerometer() {
-    _accelerometerSubscription = userAccelerometerEventStream().listen((
-      UserAccelerometerEvent event,
-    ) {
+    _accelerometerSubscription = userAccelerometerEventStream()
+        .listen((UserAccelerometerEvent event) async {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      bool isAccelEnabled = prefs.getBool('accel_enabled') ?? true;
+      if (!isAccelEnabled) return;
+
       double acceleration = sqrt(
         pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2),
       );
+
       if (acceleration > 15) {
         final now = DateTime.now();
         if (now.difference(_lastRefreshTime).inSeconds > 3) {
           _lastRefreshTime = now;
           if (mounted) {
-            // Sembunyikan snackbar yang lama agar tidak menumpuk jika digoyang berkali-kali
+            // Tampilkan notifikasi sinkronisasi
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 elevation: 0,
                 behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors
-                    .transparent, // Dibuat transparan agar bisa pakai custom Container
-                margin: const EdgeInsets.only(
-                  bottom: 90,
-                  left: 20,
-                  right: 20,
-                ), // Pas di atas Floating Navbar
-                duration: const Duration(milliseconds: 1500), // 1.5 detik
+                backgroundColor: Colors.transparent,
+                margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
+                duration: const Duration(milliseconds: 1500),
                 content: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E), // Tema gelap premium
+                    color: const Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: const Color(0xFF3949AB).withOpacity(0.5),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF3949AB).withOpacity(0.2),
-                        blurRadius: 15,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 5),
-                      ),
-                    ],
+                        color: const Color(0xFF3949AB).withOpacity(0.5),
+                        width: 1.5),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      // Ikon Animasi Putar dengan background bulat
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3949AB).withOpacity(0.2),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.sync_rounded,
-                          color: Color(0xFF8C9EFF),
-                          size: 22,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Teks Dua Baris yang Elegan
-                      const Expanded(
+                      Icon(Icons.sync_rounded,
+                          color: Color(0xFF8C9EFF), size: 22),
+                      SizedBox(width: 12), 
+                      Expanded(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              "Sinkronisasi Selesai",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            SizedBox(height: 2),
+                            Text("Sinkronisasi Selesai",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
                             Text(
                               "Data saldo & transaksi diperbarui",
-                              style: TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 12),
+                              maxLines: 1, // Memaksa teks jadi 1 baris
+                              overflow: TextOverflow
+                                  .ellipsis, // Jika mentok kanan, ubah jadi titik-titik (...)
                             ),
                           ],
                         ),
@@ -167,8 +140,8 @@ class _StatisticScreenState extends State<StatisticScreen> {
       _currentDate.month,
       _currentDate.year,
     );
-    List<Map<String, dynamic>> allTrx = await _financeController
-        .getUserTransactions();
+    List<Map<String, dynamic>> allTrx =
+        await _financeController.getUserTransactions();
     int daysInMonth = DateUtils.getDaysInMonth(
       _currentDate.year,
       _currentDate.month,
@@ -192,8 +165,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
 
     List<FlSpot> spots = [];
     double runningTotal = 0.0;
-    bool isCurrentMonth =
-        _currentDate.month == DateTime.now().month &&
+    bool isCurrentMonth = _currentDate.month == DateTime.now().month &&
         _currentDate.year == DateTime.now().year;
     int today = DateTime.now().day;
 
@@ -356,17 +328,16 @@ class _StatisticScreenState extends State<StatisticScreen> {
                         IconButton(
                           icon: Icon(
                             Icons.chevron_right_rounded,
-                            color:
-                                _currentDate.month == DateTime.now().month &&
+                            color: _currentDate.month == DateTime.now().month &&
                                     _currentDate.year == DateTime.now().year
                                 ? Colors.white24
                                 : Colors.white,
                           ),
                           onPressed:
                               _currentDate.month == DateTime.now().month &&
-                                  _currentDate.year == DateTime.now().year
-                              ? null
-                              : () => _changeMonth(1),
+                                      _currentDate.year == DateTime.now().year
+                                  ? null
+                                  : () => _changeMonth(1),
                         ),
                       ],
                     ),
@@ -441,26 +412,25 @@ class _StatisticScreenState extends State<StatisticScreen> {
                                   child: PieChart(
                                     PieChartData(
                                       pieTouchData: PieTouchData(
-                                        touchCallback:
-                                            (
-                                              FlTouchEvent event,
-                                              pieTouchResponse,
-                                            ) {
-                                              setState(() {
-                                                if (!event
-                                                        .isInterestedForInteractions ||
-                                                    pieTouchResponse == null ||
-                                                    pieTouchResponse
-                                                            .touchedSection ==
-                                                        null) {
-                                                  _touchedIndex = -1;
-                                                  return;
-                                                }
-                                                _touchedIndex = pieTouchResponse
-                                                    .touchedSection!
-                                                    .touchedSectionIndex;
-                                              });
-                                            },
+                                        touchCallback: (
+                                          FlTouchEvent event,
+                                          pieTouchResponse,
+                                        ) {
+                                          setState(() {
+                                            if (!event
+                                                    .isInterestedForInteractions ||
+                                                pieTouchResponse == null ||
+                                                pieTouchResponse
+                                                        .touchedSection ==
+                                                    null) {
+                                              _touchedIndex = -1;
+                                              return;
+                                            }
+                                            _touchedIndex = pieTouchResponse
+                                                .touchedSection!
+                                                .touchedSectionIndex;
+                                          });
+                                        },
                                       ),
                                       borderData: FlBorderData(show: false),
                                       sectionsSpace: 4,
@@ -470,7 +440,6 @@ class _StatisticScreenState extends State<StatisticScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 24),
-
                                 Container(
                                   width: double.infinity,
                                   padding: const EdgeInsets.symmetric(
@@ -483,9 +452,10 @@ class _StatisticScreenState extends State<StatisticScreen> {
                                     border: Border.all(
                                       color: _touchedIndex == -1
                                           ? Colors.transparent
-                                          : _categoryColors[_categoryDataList[_touchedIndex]
-                                                    .key]!
-                                                .withOpacity(0.5),
+                                          : _categoryColors[_categoryDataList[
+                                                      _touchedIndex]
+                                                  .key]!
+                                              .withOpacity(0.5),
                                       width: 1.5,
                                     ),
                                   ),
@@ -498,8 +468,10 @@ class _StatisticScreenState extends State<StatisticScreen> {
                                         style: TextStyle(
                                           color: _touchedIndex == -1
                                               ? Colors.grey
-                                              : _categoryColors[_categoryDataList[_touchedIndex]
-                                                    .key],
+                                              : _categoryColors[
+                                                  _categoryDataList[
+                                                          _touchedIndex]
+                                                      .key],
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -510,7 +482,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
                                           _touchedIndex == -1
                                               ? _expense
                                               : _categoryDataList[_touchedIndex]
-                                                    .value,
+                                                  .value,
                                         ),
                                         style: const TextStyle(
                                           color: Colors.white,
@@ -846,7 +818,6 @@ class _StatisticScreenState extends State<StatisticScreen> {
               height: 1.5,
             ),
           ),
-
           const SizedBox(height: 16),
           SizedBox(
             width: double.infinity,
