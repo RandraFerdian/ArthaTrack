@@ -48,7 +48,7 @@ Pastikan Anda sudah menginstal:
 Buka terminal Anda dan jalankan perintah berikut:
 ```bash
 # 1. Kloning repositori
-git clone [https://github.com/username-anda/arthatrack.git](https://github.com/username-anda/arthatrack.git)
+git clone [https://github.com/RandraFerdian/arthatrack.git](https://github.com/RandraFerdian/arthatrack.git)
 
 # 2. Masuk ke direktori aplikasi
 cd arthatrack
