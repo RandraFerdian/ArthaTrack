@@ -38,12 +38,17 @@ class FinanceController {
     required double amount,
     required String type,
     required String category,
-    String? date, // Tanggal opsional
+    String? date,
+    bool isSystem = false,
   }) async {
     try {
       int? userId = await _getCurrentUserId();
       if (userId == null) return "Sesi tidak ditemukan. Silakan login ulang.";
-      Position? position = await _getCurrentLocation();
+      Position? position;
+      if (!isSystem) {
+        position = await _getCurrentLocation();
+      }
+
       final transactionData = {
         'user_id': userId,
         'title': title,
@@ -89,10 +94,16 @@ class FinanceController {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getUserTransactions() async {
+  Future<List<Map<String, dynamic>>> getUserTransactions({int? limit}) async {
     int? userId = await _getCurrentUserId();
     if (userId == null) return [];
-    return await DatabaseHelper.instance.getTransactionsByUser(userId);
+    List<Map<String, dynamic>> transactions =
+        await DatabaseHelper.instance.getTransactionsByUser(userId);
+    if (limit != null && transactions.length > limit) {
+      return transactions.take(limit).toList();
+    }
+
+    return transactions;
   }
 
   Future<double> getTotalBalance() async {
@@ -147,27 +158,23 @@ class FinanceController {
     String goalName,
   ) async {
     try {
-      // 1. Cek dulu apakah Saldo Utama cukup!
       double totalBalance = await getTotalBalance();
       if (totalBalance < amount) {
         throw Exception(
           "Saldo utama tidak mencukupi untuk menabung sebesar itu.",
         );
       }
-
-      // 2. Tambahkan uang ke tabel target
       int result = await DatabaseHelper.instance.addMoneyToGoal(goalId, amount);
-
-      // 3. Jika berhasil, otomatis potong saldo utama (Catat sebagai pengeluaran)
       if (result > 0) {
         await addTransaction(
           title:
-              "Alokasi Target: $goalName", // Nama transaksi yang muncul di riwayat
+              "Alokasi Target: $goalName", 
           amount: amount,
           type:
-              'expense', // Dihitung sebagai pengeluaran agar saldo utama berkurang
-          category: 'Investasi', // Masuk kategori investasi/tabungan
+              'expense', 
+          category: 'Investasi', 
           date: DateTime.now().toIso8601String(),
+          isSystem: true,
         );
         return true;
       }
@@ -252,35 +259,82 @@ class FinanceController {
     return categoryTotals;
   }
 
-  // [BARU] Mengambil ringkasan data untuk dikirim ke AI
   Future<String> getAIFinancialContext() async {
+    final now = DateTime.now();
     double balance = await getTotalBalance();
-    final summary = await getMonthlySummary(
-      DateTime.now().month,
-      DateTime.now().year,
-    );
+
+    final summary = await getMonthlySummary(now.month, now.year);
+    double income = summary['income'] ?? 0.0;
+    double expense = summary['expense'] ?? 0.0;
+    double cashFlow = income - expense;
+
     final goals = await getUserSavingsGoals();
-    final expenses = await getExpensesByCategory(
-      DateTime.now().month,
-      DateTime.now().year,
-    );
+    final expenses = await getExpensesByCategory(now.month, now.year);
 
-    String context = "Saldo Utama: Rp ${balance.toStringAsFixed(0)}\n";
-    context +=
-        "Pemasukan Bulan Ini: Rp ${summary['income']?.toStringAsFixed(0)}\n";
-    context +=
-        "Pengeluaran Bulan Ini: Rp ${summary['expense']?.toStringAsFixed(0)}\n";
+    // Ambil 5 transaksi terakhir untuk melihat pola belanja (habit)
+    final recentTransactions = await getUserTransactions(limit: 5);
 
-    context += "\nTarget Tabungan:\n";
-    for (var g in goals) {
-      context +=
-          "- ${g['goal_name']}: ${g['current_amount']}/${g['target_amount']} (DL: ${g['deadline']})\n";
+    // 1. HEADER & STATUS KAS UTAMA
+    String context = "=== LAPORAN KEUANGAN USER ===\n";
+    context += "Tanggal Rekap Saat Ini: ${now.day}/${now.month}/${now.year}\n";
+    context += "Sisa Saldo Utama: Rp ${balance.toStringAsFixed(0)}\n";
+    context += "Pemasukan Bulan Ini: Rp ${income.toStringAsFixed(0)}\n";
+    context += "Pengeluaran Bulan Ini: Rp ${expense.toStringAsFixed(0)}\n";
+    context +=
+        "Status Arus Kas (Cashflow): ${cashFlow >= 0 ? 'SURPLUS' : 'DEFISIT'} Rp ${cashFlow.abs().toStringAsFixed(0)}\n\n";
+
+    // 2. STATUS TARGET TABUNGAN (Diperkaya dengan persentase & sisa hari)
+    context += "=== TARGET TABUNGAN (WISHLIST) ===\n";
+    if (goals.isEmpty) {
+      context += "- User belum memiliki target tabungan apa pun.\n";
+    } else {
+      for (var g in goals) {
+        double current = g['current_amount'] ?? 0.0;
+        double target = g['target_amount'] ?? 0.0;
+        double percent = target > 0 ? (current / target) * 100 : 0;
+
+        // Hitung sisa hari
+        int daysLeft = 0;
+        try {
+          daysLeft = DateTime.parse(g['deadline']).difference(now).inDays;
+        } catch (e) {
+          daysLeft = 0;
+        }
+
+        String statusWaktu = daysLeft < 0
+            ? "TERLAMBAT ${daysLeft.abs()} HARI"
+            : "Sisa $daysLeft hari";
+        context +=
+            "- [${g['goal_name']}] Terkumpul: Rp ${current.toStringAsFixed(0)} dari Rp ${target.toStringAsFixed(0)} (${percent.toStringAsFixed(1)}%). Deadline: $statusWaktu.\n";
+      }
     }
 
-    context += "\nDetail Pengeluaran Per Kategori:\n";
-    expenses.forEach((key, value) {
-      context += "- $key: Rp ${value.toStringAsFixed(0)}\n";
-    });
+    // 3. DISTRIBUSI PENGELUARAN (Untuk mendeteksi kebocoran dana)
+    context += "\n=== KATEGORI PENGELUARAN TERBESAR BULAN INI ===\n";
+    if (expenses.isEmpty) {
+      context += "- Belum ada pengeluaran bulan ini.\n";
+    } else {
+      // Urutkan dari pengeluaran terbesar ke terkecil
+      var sortedExpenses = expenses.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+      for (var entry in sortedExpenses) {
+        context +=
+            "- Kategori ${entry.key}: Rp ${entry.value.toStringAsFixed(0)}\n";
+      }
+    }
+
+    // 4. POLA TRANSAKSI TERBARU (Sangat krusial untuk AI agar bisa me-roasting habit spesifik)
+    context += "\n=== 5 TRANSAKSI TERAKHIR (POLA HABIT) ===\n";
+    if (recentTransactions.isEmpty) {
+      context += "- Belum ada riwayat transaksi.\n";
+    } else {
+      for (var trx in recentTransactions) {
+        String type = trx['type'] == 'income' ? 'Pemasukan' : 'Pengeluaran';
+        context +=
+            "- ${trx['date']} | $type | ${trx['category']} | Catatan: ${trx['title']} | Rp ${trx['amount'].toStringAsFixed(0)}\n";
+      }
+    }
 
     return context;
   }

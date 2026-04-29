@@ -286,8 +286,6 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
     double? value,
   }) {
     final curr = _currencyData.firstWhere((e) => e['code'] == currencyCode);
-
-    // --- LOGIKA FORMAT KOMA UNTUK HASIL (OUTPUT) ---
     String formattedOutput = "0.00";
     if (value != null && value > 0) {
       String valStr = value.toStringAsFixed(2);
@@ -296,11 +294,19 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
         (Match m) => '${m[1]},',
       );
-      formattedOutput = parts.length > 1
-          ? "$formattedInteger.${parts[1]}"
-          : formattedInteger;
+      formattedOutput =
+          parts.length > 1 ? "$formattedInteger.${parts[1]}" : formattedInteger;
     }
-    // -----------------------------------------------
+    double getDynamicFontSize(String text) {
+      int len = text.length;
+      if (len <= 10) return 24.0;
+      if (len <= 14) return 18.0;
+      if (len <= 18) return 14.0;
+      return 12.0;
+    }
+
+    String textToMeasure = isInput ? (controller?.text ?? "") : formattedOutput;
+    double dynamicFontSize = getDynamicFontSize(textToMeasure);
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -313,66 +319,76 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
         children: [
           Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              GestureDetector(
-                onTap: onTap,
-                child: Row(
-                  children: [
-                    Text(curr['flag'], style: const TextStyle(fontSize: 28)),
-                    const SizedBox(width: 8),
-                    Text(
-                      currencyCode,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              Expanded(
-                flex: 2,
-                child: isInput
-                    ? TextField(
-                        controller: controller,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          signed: false,
-                          decimal: false,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          CurrencyInputFormatter(),
-                        ],
-                        textAlign: TextAlign.right,
+          SizedBox(
+            height: 50,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: onTap,
+                  child: Row(
+                    children: [
+                      Text(curr['flag'], style: const TextStyle(fontSize: 28)),
+                      const SizedBox(width: 8),
+                      Text(
+                        currencyCode,
                         style: const TextStyle(
                           color: Colors.white,
-                          fontSize:
-                              24, // Saya kembalikan ke ukuran 24 agar seimbang dengan bendera
-                          fontWeight: FontWeight.bold,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: "0",
-                          hintStyle: TextStyle(color: Colors.white10),
-                          border: InputBorder.none,
-                        ),
-                      )
-                    : Text(
-                        // Menggunakan variabel yang sudah diberi koma
-                        formattedOutput,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: Color(0xFF00C853),
-                          fontSize:
-                              24, 
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-              ),
-            ],
+                      const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: isInput
+                      ? TextField(
+                          controller: controller,
+                          onChanged: (value) {
+                            setState(() {});
+                          },
+                          keyboardType: const TextInputType.numberWithOptions(
+                            signed: false,
+                            decimal: false,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            CurrencyInputFormatter(),
+                          ],
+                          textAlign: TextAlign.right,
+                          textAlignVertical: TextAlignVertical.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: dynamicFontSize,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          decoration: const InputDecoration(
+                            hintText: "0",
+                            hintStyle: TextStyle(color: Colors.white10),
+                            border: InputBorder.none,
+                          ),
+                        )
+                      // KUNCI 3: Gunakan FittedBox untuk Output, otomatis mengecil dan anti-potong
+                      : FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            formattedOutput,
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              color: Color(0xFF00C853),
+                              fontSize: 24.0,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -397,9 +413,8 @@ class _CurrencyConversionScreenState extends State<CurrencyConversionScreen> {
       RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
       (Match m) => '${m[1]},',
     );
-    String finalFormattedRate = parts.length > 1
-        ? "$formattedInteger.${parts[1]}"
-        : formattedInteger;
+    String finalFormattedRate =
+        parts.length > 1 ? "$formattedInteger.${parts[1]}" : formattedInteger;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

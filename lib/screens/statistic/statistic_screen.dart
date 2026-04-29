@@ -175,7 +175,6 @@ class _StatisticScreenState extends State<StatisticScreen> {
       spots.add(FlSpot(i.toDouble(), runningTotal));
     }
 
-    // [DIPERBAIKI] Panggilan AI Otomatis Dihapus agar hemat kuota!
     if (mounted) {
       setState(() {
         _income = summary['income'] ?? 0.0;

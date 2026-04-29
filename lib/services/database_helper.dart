@@ -103,20 +103,20 @@ class DatabaseHelper {
   // 1. Fungsi Register (Daftar User Baru)
   Future<int> registerUser(String username, String password) async {
     final db = await instance.database;
-
+    final List<Map<String, dynamic>> existingUser = await db.query(
+      'users',
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+    if (existingUser.isNotEmpty) {
+      return 0;
+    }
     final data = {
       'username': username,
-      'password': _hashPassword(password), // Simpan versi hash-nya!
-      'biometric_enabled': 0, // Default: biometrik belum aktif
+      'password': _hashPassword(password),
     };
 
-    // return nilai id dari user yang baru dibuat
-    // conflictAlgorithm.ignore mencegah error jika ada username yang sama
-    return await db.insert(
-      'users',
-      data,
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    return await db.insert('users', data);
   }
 
   // 2. Fungsi Login (Cek Username & Password)
@@ -157,7 +157,7 @@ class DatabaseHelper {
     return false;
   }
 
-Future<int> updateUserProfile(
+  Future<int> updateUserProfile(
       int id, String newUsername, String newBio) async {
     Database db = await instance.database;
     return await db.update(

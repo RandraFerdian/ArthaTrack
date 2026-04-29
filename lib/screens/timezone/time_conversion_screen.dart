@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 class TimeConversionScreen extends StatefulWidget {
   const TimeConversionScreen({super.key});
@@ -9,25 +11,38 @@ class TimeConversionScreen extends StatefulWidget {
 }
 
 class _TimeConversionScreenState extends State<TimeConversionScreen> {
+  bool _isTimezoneInitialized = false;
   String _fromZone = "WIB (Jakarta)";
   String _toZone = "London (UK)";
   TimeOfDay _selectedTime = TimeOfDay.now();
 
-  // Data zona waktu dengan jarak offset dari UTC (Universal Time)
-  // Cara ini 100% offline, sangat cepat, dan anti-error API!
-  final Map<String, int> _timezones = {
-    "WIB (Jakarta)": 7,
-    "WITA (Makassar)": 8,
-    "WIT (Jayapura)": 9,
-    "London (UK)": 0, // Standar UTC
-    "New York (US)": -5,
-    "Tokyo (Jepang)": 9,
-    "Singapore": 8,
-    "Makkah (Arab Saudi)": 3,
-    "Sydney (Australia)": 11,
+  final Map<String, String> _timezoneLocations = {
+    "WIB (Jakarta)": "Asia/Jakarta",
+    "WITA (Makassar)": "Asia/Makassar",
+    "WIT (Jayapura)": "Asia/Jayapura",
+    "London (UK)": "Europe/London",
+    "New York (US)": "America/New_York",
+    "Tokyo (Jepang)": "Asia/Tokyo",
+    "Singapore": "Asia/Singapore",
+    "Makkah (Arab Saudi)":
+        "Asia/Riyadh", 
+    "Sydney (Australia)": "Australia/Sydney",
   };
 
-  // Fungsi untuk memilih jam secara manual
+  @override
+  void initState() {
+    super.initState();
+    _setupTimezones();
+  }
+
+  // Fungsi untuk menginisialisasi database waktu dunia
+  Future<void> _setupTimezones() async {
+    tz.initializeTimeZones();
+    setState(() {
+      _isTimezoneInitialized = true;
+    });
+  }
+
   Future<void> _pickTime() async {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
@@ -36,9 +51,9 @@ class _TimeConversionScreenState extends State<TimeConversionScreen> {
         return Theme(
           data: ThemeData.dark().copyWith(
             colorScheme: const ColorScheme.dark(
-              primary: Colors.blueAccent, // Warna header jam
+              primary: Colors.blueAccent,
               onPrimary: Colors.white,
-              surface: Color(0xFF1E1E1E), // Warna background dialog
+              surface: Color(0xFF1E1E1E),
               onSurface: Colors.white,
             ),
           ),
@@ -54,38 +69,47 @@ class _TimeConversionScreenState extends State<TimeConversionScreen> {
     }
   }
 
-  // Fungsi untuk menghitung hasil konversi waktu
+  // LOGIKA BARU: Menghitung dengan library timezone
   Map<String, String> _getConvertedTime() {
-    int fromOffset = _timezones[_fromZone]!;
-    int toOffset = _timezones[_toZone]!;
+    if (!_isTimezoneInitialized) {
+      return {"time": "--:--", "day": "Loading..."};
+    }
 
-    // Gunakan tanggal hari ini sebagai referensi kalkulasi
-    DateTime now = DateTime.now();
-    DateTime fromDateTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
+    // 1. Ambil lokasi zona waktu
+    final fromLocation = tz.getLocation(_timezoneLocations[_fromZone]!);
+    final toLocation = tz.getLocation(_timezoneLocations[_toZone]!);
+
+    // 2. Buat objek waktu asal (berdasarkan tanggal hari ini di zona asal)
+    final nowInFromZone = tz.TZDateTime.now(fromLocation);
+    final fromTime = tz.TZDateTime(
+      fromLocation,
+      nowInFromZone.year,
+      nowInFromZone.month,
+      nowInFromZone.day,
       _selectedTime.hour,
       _selectedTime.minute,
     );
 
-    // Rumus ajaib: Waktu Asal -> dikurangi offset asal (jadi UTC) -> ditambah offset tujuan
-    DateTime targetDateTime = fromDateTime
-        .subtract(Duration(hours: fromOffset))
-        .add(Duration(hours: toOffset));
+    // 3. Konversi ke zona waktu tujuan
+    final toTime = tz.TZDateTime.from(fromTime, toLocation);
 
-    // Mengecek apakah jam tujuan jatuh pada hari kemarin atau besoknya
+    // 4. Hitung perbedaan hari (dengan murni membandingkan tanggal kalender)
+    DateTime fromDate =
+        DateTime.utc(fromTime.year, fromTime.month, fromTime.day);
+    DateTime toDate = DateTime.utc(toTime.year, toTime.month, toTime.day);
+    int dayDiff = toDate.difference(fromDate).inDays;
+
     String dayIndicator = "";
-    if (targetDateTime.day > fromDateTime.day) {
+    if (dayDiff > 0) {
       dayIndicator = "(Hari Berikutnya)";
-    } else if (targetDateTime.day < fromDateTime.day) {
+    } else if (dayDiff < 0) {
       dayIndicator = "(Hari Sebelumnya)";
     } else {
       dayIndicator = "(Hari yang Sama)";
     }
 
     return {
-      "time": DateFormat('HH:mm').format(targetDateTime),
+      "time": DateFormat('HH:mm').format(toTime),
       "day": dayIndicator,
     };
   }
@@ -117,242 +141,245 @@ class _TimeConversionScreenState extends State<TimeConversionScreen> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // --- 1. KARTU INPUT & KONVERSI ---
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white10),
-              ),
+      body: !_isTimezoneInitialized
+          ? const Center(
+              child: CircularProgressIndicator(color: Colors.blueAccent))
+          : SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.all(24.0),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Dropdown Pilih Zona
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildTimezoneDropdown(
-                          "Dari",
-                          _fromZone,
-                          (val) => setState(() => _fromZone = val!),
+                  // --- 1. KARTU INPUT & KONVERSI ---
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildTimezoneDropdown(
+                                "Dari",
+                                _fromZone,
+                                (val) => setState(() => _fromZone = val!),
+                              ),
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Icon(
+                                Icons.compare_arrows_rounded,
+                                color: Colors.blueAccent,
+                                size: 28,
+                              ),
+                            ),
+                            Expanded(
+                              child: _buildTimezoneDropdown(
+                                "Ke",
+                                _toZone,
+                                (val) => setState(() => _toZone = val!),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 16),
-                        child: Icon(
-                          Icons.compare_arrows_rounded,
-                          color: Colors.blueAccent,
-                          size: 28,
+                        const SizedBox(height: 24),
+                        GestureDetector(
+                          onTap: _pickTime,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 16,
+                              horizontal: 20,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2A2A2A),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.blueAccent.withOpacity(0.5),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Jam Asal (Pilih)",
+                                      style: TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _selectedTime.format(context),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const Icon(
+                                  Icons.edit_rounded,
+                                  color: Colors.blueAccent,
+                                  size: 28,
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: _buildTimezoneDropdown(
-                          "Ke",
-                          _toZone,
-                          (val) => setState(() => _toZone = val!),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+
                   const SizedBox(height: 24),
 
-                  // Tombol Input Waktu Manual
-                  GestureDetector(
-                    onTap: _pickTime,
-                    child: Container(
+                  // --- 2. KARTU HASIL ---
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(32),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.blue.shade900.withOpacity(0.4),
+                          const Color(0xFF1E1E1E),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      border:
+                          Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          "Jam di $_toZone:",
+                          style:
+                              const TextStyle(color: Colors.grey, fontSize: 14),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          convertedData["time"]!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 64,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            convertedData["day"]!,
+                            style: const TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 40),
+
+                  // --- 3. LIST WAKTU DUNIA SAAT INI ---
+                  const Text(
+                    "Waktu Dunia Saat Ini",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ..._timezoneLocations.entries.map((entry) {
+                    // Menghitung jam saat ini secara presisi dengan library timezone
+                    final loc = tz.getLocation(entry.value);
+                    final cityTime = tz.TZDateTime.now(loc);
+
+                    String formattedTime = DateFormat('HH:mm').format(cityTime);
+                    String formattedDate =
+                        DateFormat('dd MMM').format(cityTime);
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.symmetric(
-                        vertical: 16,
                         horizontal: 20,
+                        vertical: 16,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2A),
+                        color: const Color(0xFF1E1E1E),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.blueAccent.withOpacity(0.5),
-                        ),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          Row(
                             children: [
-                              const Text(
-                                "Jam Asal (Pilih)",
-                                style: TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
+                              const Icon(
+                                Icons.public_rounded,
+                                color: Colors.blueAccent,
+                                size: 20,
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(width: 12),
                               Text(
-                                _selectedTime.format(context),
+                                entry.key,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 24,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],
                           ),
-                          const Icon(
-                            Icons.edit_rounded,
-                            color: Colors.blueAccent,
-                            size: 28,
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                formattedTime,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                formattedDate,
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ),
-                  ),
+                    );
+                  }).toList(),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
-
-            const SizedBox(height: 24),
-
-            // --- 2. KARTU HASIL ---
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.blue.shade900.withOpacity(0.4),
-                    const Color(0xFF1E1E1E),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    "Jam di $_toZone:",
-                    style: const TextStyle(color: Colors.grey, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    convertedData["time"]!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 64,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blueAccent.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      convertedData["day"]!,
-                      style: const TextStyle(
-                        color: Colors.blueAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 40),
-
-            // --- 3. LIST WAKTU DUNIA SAAT INI ---
-            const Text(
-              "Waktu Dunia Saat Ini",
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ..._timezones.entries.map((entry) {
-              // Menghitung jam saat ini untuk masing-masing negara
-              DateTime nowUtc = DateTime.now().toUtc();
-              DateTime cityTime = nowUtc.add(Duration(hours: entry.value));
-              String formattedTime = DateFormat('HH:mm').format(cityTime);
-              String formattedDate = DateFormat('dd MMM').format(cityTime);
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.public_rounded,
-                          color: Colors.blueAccent,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          entry.key,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          formattedTime,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          formattedDate,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-            const SizedBox(height: 40), // Jarak aman di bawah
-          ],
-        ),
-      ),
     );
   }
 
-  // Widget Bantuan untuk Dropdown
   Widget _buildTimezoneDropdown(
     String label,
     String value,
@@ -390,7 +417,7 @@ class _TimeConversionScreenState extends State<TimeConversionScreen> {
                 fontSize: 13,
                 fontWeight: FontWeight.bold,
               ),
-              items: _timezones.keys.map((String key) {
+              items: _timezoneLocations.keys.map((String key) {
                 return DropdownMenuItem<String>(
                   value: key,
                   child: Text(key, overflow: TextOverflow.ellipsis),

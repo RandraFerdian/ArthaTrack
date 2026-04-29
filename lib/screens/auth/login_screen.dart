@@ -139,21 +139,11 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.account_balance_wallet,
-                size: 80,
-                color: Color(0xFF00C853),
+              Image.asset(
+                'assets/dark_mode.png',
+                height: 320,
+                fit: BoxFit.contain,
               ),
-              const SizedBox(height: 16),
-              const Text(
-                "ArthaTrack",
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 8),
               Text(
                 _isLogin ? "Silakan login untuk melanjutkan" : "Buat akun baru",
                 style: const TextStyle(color: Colors.grey, fontSize: 16),

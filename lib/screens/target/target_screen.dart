@@ -24,9 +24,27 @@ class _TargetScreenState extends State<TargetScreen> {
     _loadGoals();
   }
 
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: isError ? Colors.redAccent : const Color(0xFF00C853),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(20), // Margin normal di bawah
+      ),
+    );
+  }
+
   Future<void> _loadGoals() async {
     setState(() => _isLoading = true);
-    final goals = await _financeController.getUserSavingsGoals();
+    final rawGoals = await _financeController.getUserSavingsGoals();
+    final goals = rawGoals.toList();
 
     goals.sort((a, b) {
       bool aAchieved = a['current_amount'] >= a['target_amount'];
@@ -84,10 +102,8 @@ class _TargetScreenState extends State<TargetScreen> {
         : DateTime.now().add(const Duration(days: 30));
 
     if (existingGoal != null) {
-      String rawAmount = existingGoal['target_amount'].toString().replaceAll(
-        '.0',
-        '',
-      );
+      String rawAmount =
+          existingGoal['target_amount'].toString().replaceAll('.0', '');
       amountController.text = rawAmount.replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
         (Match m) => '${m[1]},',
@@ -101,181 +117,186 @@ class _TargetScreenState extends State<TargetScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
       ),
-      builder: (context) {
+      builder: (modalContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
+                bottom: MediaQuery.of(modalContext).viewInsets.bottom,
                 left: 24,
                 right: 24,
                 top: 32,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    existingGoal == null ? "Target Baru" : "Edit Target",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: titleController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "Nama Target (ex: Beli Laptop)",
-                      labelStyle: const TextStyle(color: Colors.grey),
-                      filled: true,
-                      fillColor: const Color(0xFF2A2A2A),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.flag_rounded,
-                        color: Colors.indigoAccent,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      CurrencyInputFormatter(),
-                    ],
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      labelText: "Nominal Target",
-                      labelStyle: const TextStyle(color: Colors.grey),
-                      prefixText: "Rp ",
-                      prefixStyle: const TextStyle(color: Colors.white),
-                      filled: true,
-                      fillColor: const Color(0xFF2A2A2A),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      prefixIcon: const Icon(
-                        Icons.monetization_on_rounded,
-                        color: Colors.amber,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  GestureDetector(
-                    onTap: () async {
-                      DateTime? picked = await showDatePicker(
-                        context: context,
-                        initialDate: selectedDate,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime(2050),
-                        builder: (context, child) => Theme(
-                          data: ThemeData.dark().copyWith(
-                            colorScheme: const ColorScheme.dark(
-                              primary: Colors.indigoAccent,
-                            ),
-                          ),
-                          child: child!,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white24,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                      );
-                      if (picked != null)
-                        setModalState(() => selectedDate = picked);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 18,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2A),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.calendar_month_rounded,
-                            color: Colors.tealAccent,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            "Tenggat Waktu: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigoAccent,
-                        shape: RoundedRectangleBorder(
+                    const SizedBox(height: 24),
+                    Text(
+                      existingGoal == null ? "Target Baru" : "Edit Target",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: titleController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Nama Target (ex: Beli Laptop)",
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        filled: true,
+                        fillColor: const Color(0xFF2A2A2A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        prefixIcon: const Icon(Icons.flag_rounded,
+                            color: Colors.indigoAccent),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        CurrencyInputFormatter(),
+                      ],
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: "Nominal Target",
+                        labelStyle: const TextStyle(color: Colors.grey),
+                        prefixText: "Rp ",
+                        prefixStyle: const TextStyle(color: Colors.white),
+                        filled: true,
+                        fillColor: const Color(0xFF2A2A2A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
+                        ),
+                        prefixIcon: const Icon(Icons.monetization_on_rounded,
+                            color: Colors.amber),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: () async {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        DateTime? picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime(2050),
+                          builder: (context, child) => Theme(
+                            data: ThemeData.dark().copyWith(
+                              colorScheme: const ColorScheme.dark(
+                                  primary: Colors.indigoAccent),
+                            ),
+                            child: child!,
+                          ),
+                        );
+                        if (picked != null)
+                          setModalState(() => selectedDate = picked);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 18),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2A2A2A),
                           borderRadius: BorderRadius.circular(16),
                         ),
-                      ),
-                      onPressed: () async {
-                        if (titleController.text.isEmpty ||
-                            amountController.text.isEmpty)
-                          return;
-                        double targetAmount =
-                            double.tryParse(
-                              amountController.text.replaceAll(',', ''),
-                            ) ??
-                            0.0;
-                        if (targetAmount <= 0) return;
-                        if (existingGoal == null) {
-                          await _financeController.addSavingsGoal(
-                            titleController.text,
-                            targetAmount,
-                            selectedDate.toIso8601String(),
-                          );
-                        } else {
-                          await _financeController.updateSavingsGoal(
-                            existingGoal['id'],
-                            titleController.text,
-                            targetAmount,
-                            selectedDate.toIso8601String(),
-                          );
-                        }
-                        Navigator.pop(context);
-                        _loadGoals();
-                      },
-                      child: const Text(
-                        "Simpan Target",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_month_rounded,
+                                color: Colors.tealAccent),
+                            const SizedBox(width: 12),
+                            Text(
+                              "Tenggat Waktu: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
+                              style: const TextStyle(
+                                  color: Colors.white, fontSize: 16),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigoAccent,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        onPressed: () async {
+                          // TURUNKAN KEYBOARD SAAT TOMBOL DITEKAN
+                          FocusManager.instance.primaryFocus?.unfocus();
+
+                          // VALIDASI MENGGUNAKAN ERROR DIALOG BARU
+                          if (titleController.text.trim().isEmpty) {
+                            _showErrorDialog("Nama target tidak boleh kosong!");
+                            return;
+                          }
+
+                          double targetAmount = double.tryParse(
+                                  amountController.text.replaceAll(',', '')) ??
+                              0.0;
+
+                          if (targetAmount <= 0) {
+                            _showErrorDialog(
+                                "Nominal target harus lebih dari Rp 0!");
+                            return;
+                          }
+
+                          if (existingGoal == null) {
+                            await _financeController.addSavingsGoal(
+                              titleController.text.trim(),
+                              targetAmount,
+                              selectedDate.toIso8601String(),
+                            );
+                            _showSnackBar("Target baru berhasil dibuat! 🎯");
+                          } else {
+                            await _financeController.updateSavingsGoal(
+                              existingGoal['id'],
+                              titleController.text.trim(),
+                              targetAmount,
+                              selectedDate.toIso8601String(),
+                            );
+                            _showSnackBar("Target berhasil diperbarui! ✏️");
+                          }
+
+                          if (!modalContext.mounted) return;
+                          Navigator.pop(modalContext);
+                          _loadGoals();
+                        },
+                        child: const Text(
+                          "Simpan Target",
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
             );
           },
@@ -285,11 +306,7 @@ class _TargetScreenState extends State<TargetScreen> {
   }
 
   void _showAddMoneyForm(
-    int goalId,
-    String goalName,
-    double target,
-    double current,
-  ) {
+      int goalId, String goalName, double target, double current) {
     final amountController = TextEditingController();
     double remaining = target - current;
 
@@ -311,139 +328,131 @@ class _TargetScreenState extends State<TargetScreen> {
                 right: 24,
                 top: 32,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white24,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    "Nabung untuk $goalName",
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    "Kurang ${_formatRupiah(remaining)} lagi!",
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      CurrencyInputFormatter(),
-                    ],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                    decoration: InputDecoration(
-                      hintText: "0",
-                      hintStyle: const TextStyle(color: Colors.white24),
-                      prefixText: "Rp ",
-                      filled: true,
-                      fillColor: const Color(0xFF2A2A2A),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                        borderSide: BorderSide.none,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 24),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 55,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF00C853),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                    const SizedBox(height: 24),
+                    Text(
+                      "Nabung untuk $goalName",
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Kurang ${_formatRupiah(remaining)} lagi!",
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                    const SizedBox(height: 24),
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        CurrencyInputFormatter(),
+                      ],
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                      decoration: InputDecoration(
+                        hintText: "0",
+                        hintStyle: const TextStyle(color: Colors.white24),
+                        prefixText: "Rp ",
+                        filled: true,
+                        fillColor: const Color(0xFF2A2A2A),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
                         ),
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 24),
                       ),
-                      onPressed: isProcessing
-                          ? null
-                          : () async {
-                              double amountToAdd =
-                                  double.tryParse(
-                                    amountController.text.replaceAll(',', ''),
-                                  ) ??
-                                  0.0;
-                              if (amountToAdd <= 0) return;
-                              setModalState(() => isProcessing = true);
-                              try {
-                                await _financeController.addMoneyToGoal(
-                                  goalId,
-                                  amountToAdd,
-                                  goalName,
-                                );
-                                if (!modalContext.mounted) return;
-                                Navigator.pop(modalContext);
-                                if (!mounted) return;
-                                _loadGoals();
-                                ScaffoldMessenger.of(this.context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      "Berhasil menabung! Saldo utama telah dipotong.",
-                                    ),
-                                    backgroundColor: Color(0xFF00C853),
-                                  ),
-                                );
-                              } catch (e) {
-                                if (!modalContext.mounted) return;
-                                setModalState(() => isProcessing = false);
-                                if (mounted) {
-                                  ScaffoldMessenger.of(
-                                    this.context,
-                                  ).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        e.toString().replaceAll(
-                                          'Exception: ',
-                                          '',
-                                        ),
-                                      ),
-                                      backgroundColor: Colors.redAccent,
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                      child: isProcessing
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 3,
-                              ),
-                            )
-                          : const Text(
-                              "Tambahkan Saldo",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                ],
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 55,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00C853),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16)),
+                        ),
+                        onPressed: isProcessing
+                            ? null
+                            : () async {
+                                FocusManager.instance.primaryFocus
+                                    ?.unfocus(); // TURUNKAN KEYBOARD
+
+                                double amountToAdd = double.tryParse(
+                                        amountController.text
+                                            .replaceAll(',', '')) ??
+                                    0.0;
+
+                                if (amountToAdd <= 0) {
+                                  _showErrorDialog(
+                                      "Masukkan nominal yang valid!");
+                                  return;
+                                }
+
+                                setModalState(() => isProcessing = true);
+                                try {
+                                  await _financeController.addMoneyToGoal(
+                                    goalId,
+                                    amountToAdd,
+                                    goalName,
+                                  );
+                                  if (!modalContext.mounted) return;
+                                  Navigator.pop(modalContext);
+
+                                  if (!mounted) return;
+                                  _loadGoals();
+                                  _showSnackBar(
+                                      "Berhasil menabung! Saldo utama telah dipotong. 🎉");
+                                } catch (e) {
+                                  if (!modalContext.mounted) return;
+                                  setModalState(() => isProcessing = false);
+                                  if (mounted) {
+                                    // UBAH JUGA KE ERROR DIALOG BILA GAGAL (Misal saldo tidak cukup)
+                                    _showErrorDialog(e
+                                        .toString()
+                                        .replaceAll('Exception: ', ''));
+                                  }
+                                }
+                              },
+                        child: isProcessing
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 3),
+                              )
+                            : const Text(
+                                "Tambahkan Saldo",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                  ],
+                ),
               ),
             );
           },
@@ -468,18 +477,51 @@ class _TargetScreenState extends State<TargetScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text("Batal"),
+            child: const Text("Batal", style: TextStyle(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await _financeController.deleteSavingsGoal(id);
               _loadGoals();
+              _showSnackBar("Target berhasil dihapus 🗑️");
             },
             child: const Text(
               "Hapus",
-              style: TextStyle(color: Colors.redAccent),
+              style: TextStyle(
+                  color: Colors.redAccent, fontWeight: FontWeight.bold),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String message) {
+    FocusManager.instance.primaryFocus?.unfocus(); // Turunkan keyboard otomatis
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF2A2A2A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text("Peringatan",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(color: Colors.grey)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK Mengerti",
+                style: TextStyle(
+                    color: Colors.indigoAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -528,7 +570,7 @@ class _TargetScreenState extends State<TargetScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildAIInsightCard(), // Memanggil Insight dari Gemini
+                    _buildAIInsightCard(),
                     const SizedBox(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -616,7 +658,7 @@ class _TargetScreenState extends State<TargetScreen> {
                                                       0.2,
                                                     )
                                                   : Colors.indigoAccent
-                                                        .withOpacity(0.2),
+                                                      .withOpacity(0.2),
                                               shape: BoxShape.circle,
                                             ),
                                             child: Icon(
@@ -651,14 +693,14 @@ class _TargetScreenState extends State<TargetScreen> {
                                                   isAchieved
                                                       ? "Target Tercapai! 🎉"
                                                       : (daysLeft < 0
-                                                            ? "Terlambat ${daysLeft.abs()} hari"
-                                                            : "Sisa $daysLeft hari"),
+                                                          ? "Terlambat ${daysLeft.abs()} hari"
+                                                          : "Sisa $daysLeft hari"),
                                                   style: TextStyle(
                                                     color: isAchieved
                                                         ? Colors.green
                                                         : (daysLeft <= 7
-                                                              ? Colors.redAccent
-                                                              : Colors.grey),
+                                                            ? Colors.redAccent
+                                                            : Colors.grey),
                                                     fontSize: 12,
                                                     fontWeight: FontWeight.bold,
                                                   ),
@@ -758,10 +800,10 @@ class _TargetScreenState extends State<TargetScreen> {
                                           ),
                                           valueColor:
                                               AlwaysStoppedAnimation<Color>(
-                                                isAchieved
-                                                    ? Colors.green
-                                                    : Colors.indigoAccent,
-                                              ),
+                                            isAchieved
+                                                ? Colors.green
+                                                : Colors.indigoAccent,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 16),
@@ -867,9 +909,7 @@ class _TargetScreenState extends State<TargetScreen> {
               height: 1.5,
             ),
           ),
-
           const SizedBox(height: 16),
-          // TOMBOL MANUAL TRIGGER AI
           SizedBox(
             width: double.infinity,
             height: 40,

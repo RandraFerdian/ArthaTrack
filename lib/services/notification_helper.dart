@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart'; // [BARU] Import ini wajib ada agar kode Color dikenali
+import 'package:flutter/material.dart'; 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationHelper {
@@ -56,7 +56,6 @@ class NotificationHelper {
       android: androidDetails,
     );
 
-    // [DIPERBAIKI] Versi terbaru mewajibkan named parameters (id:, title:, body:, notificationDetails:)
     await _notificationsPlugin.show(
       id: DateTime.now().millisecond,
       title: title,
@@ -81,9 +80,8 @@ class NotificationHelper {
       android: androidDetails,
     );
 
-    // [DIPERBAIKI] Menggunakan Named Parameters sesuai aturan versi terbaru
     await _notificationsPlugin.periodicallyShow(
-      id: 888, // Wajib pakai "id:"
+      id: 888, 
       title: 'Waktunya Catat Keuangan! 💸',
       body: 'Jangan sampai ada pengeluaran yang terlewat. Yuk catat sekarang!',
       repeatInterval: RepeatInterval.daily,
@@ -92,7 +90,6 @@ class NotificationHelper {
     );
   }
 
-  // [BARU] Fungsi untuk mematikan/membatalkan pengingat
   static Future<void> cancelReminder() async {
     // [DIPERBAIKI] Menggunakan Named Parameters
     await _notificationsPlugin.cancel(id: 888);

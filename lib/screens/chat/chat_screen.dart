@@ -37,27 +37,29 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _initializeChat() async {
     setState(() => _isLoading = true);
-
-    // 1. Ambil konteks data pengguna dari aplikasi
     String? userName = await _authController.getLoggedInUserName();
     double totalBalance = await _financeController.getTotalBalance();
     String financialContext = await _financeController.getAIFinancialContext();
-
-    // Format saldo ke Rupiah
     String balanceStr =
         "Rp ${totalBalance.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}";
-
-    // 2. Siapkan Model Gemini & Berikan Instruksi Sistem (Context)
     final model = GenerativeModel(
       model: 'gemini-2.5-flash',
       apiKey: _apiKey,
       systemInstruction: Content.system(
-        "Kamu adalah 'Artha AI', konsultan keuangan pribadi $userName. "
-        "Gunakan data berikut untuk memberikan saran yang SANGAT SPESIFIK:\n$financialContext\n\n"
-        "Tugasmu: Analisis apakah pengeluarannya wajar, beri saran agar target tabungannya cepat tercapai, "
-        "dan peringatkan jika pengeluaran di kategori tertentu terlalu besar. "
-        "Jangan hanya menyapa, tapi berikan satu insight menarik tentang datanya di awal.",
-      ),
+          "Kamu adalah 'Artha AI', asisten dan konsultan keuangan pribadi yang cerdas, asyik, bergaya bahasa anak muda masa kini, analitis, dan suka bicara blak-blakan (candid).\n\n"
+          "Klien yang sedang berkonsultasi denganmu adalah: $userName.\n"
+          "Total saldo utamanya saat ini adalah: $balanceStr.\n\n"
+          "Berikut adalah rekap data keuangannya (Transaksi & Target Tabungan):\n"
+          "```\n$financialContext\n```\n\n"
+          "TUGAS UTAMAMU SAAT MEMBALAS CHAT PERTAMA:\n"
+          "1. Insight Mengejutkan: Jangan mulai dengan sapaan basa-basi biasa. Langsung berikan satu temuan menarik/mengejutkan dari pola pengeluarannya (misal: 'Wah, saldo kamu sisa segini tapi jajan kopinya kenceng juga ya!').\n"
+          "2. Analisis Pengeluaran: Evaluasi apakah pengeluarannya wajar dibandingkan dengan total saldonya saat ini.\n"
+          "3. Red Flag (Peringatan): Berikan teguran (roasting tipis/halus) jika ada kategori pengeluaran yang terlalu mendominasi.\n"
+          "4. Strategi Target: Berikan saran step-by-step yang logis dan realistis agar target tabungannya bisa tercapai sebelum deadline.\n\n"
+          "ATURAN JAWABAN:\n"
+          "- Gunakan format Markdown (Bullet points, **Bold**) agar rapi dibaca di HP.\n"
+          "- Gunakan emoji secukupnya agar chat terasa hidup.\n"
+          "- DILARANG MENGARANG DATA. Hanya analisis berdasarkan data context di atas."),
     );
 
     // 3. Mulai Sesi Chat
@@ -255,9 +257,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: _isLoading
-                            ? Colors.grey
-                            : const Color(0xFF651FFF),
+                        color:
+                            _isLoading ? Colors.grey : const Color(0xFF651FFF),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -290,12 +291,10 @@ class _ChatScreenState extends State<ChatScreen> {
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
-            bottomLeft: isUser
-                ? const Radius.circular(20)
-                : const Radius.circular(4),
-            bottomRight: isUser
-                ? const Radius.circular(4)
-                : const Radius.circular(20),
+            bottomLeft:
+                isUser ? const Radius.circular(20) : const Radius.circular(4),
+            bottomRight:
+                isUser ? const Radius.circular(4) : const Radius.circular(20),
           ),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

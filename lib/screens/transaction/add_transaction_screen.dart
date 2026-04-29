@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 class AddTransactionScreen extends StatefulWidget {
   final String initialType;
   final Map<String, dynamic>?
-  existingTransaction; // Menyimpan data jika mode edit
+      existingTransaction; // Menyimpan data jika mode edit
 
   const AddTransactionScreen({
     super.key,
@@ -56,9 +56,8 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       } catch (e) {}
 
       // Format angka dengan koma untuk nominal
-      String rawAmount = widget.existingTransaction!['amount']
-          .toString()
-          .replaceAll('.0', '');
+      String rawAmount =
+          widget.existingTransaction!['amount'].toString().replaceAll('.0', '');
       _amountController.text = rawAmount.replaceAllMapped(
         RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
         (Match m) => '${m[1]},',
@@ -96,7 +95,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Isi nominal dan catatan dulu, ya!"),
-          backgroundColor: Color(0xFF1E1E1E),
+          backgroundColor: Colors.white,
         ),
       );
       return;
@@ -141,9 +140,7 @@ class _AddTransactionScreenState extends State<AddTransactionScreen> {
 
     setState(() => _isLoading = false);
 
-if (error == null) {
-      // [BARU] Munculkan Notifikasi Sistem!
-      // Ubah tipe bahasa Inggris jadi bahasa Indonesia untuk notif
+    if (error == null) {
       String tipeText = _selectedType == 'income' ? 'Pemasukan' : 'Pengeluaran';
       String formattedNominal = "Rp ${NumberFormat('#,###').format(amount)}";
 
@@ -167,10 +164,18 @@ if (error == null) {
   @override
   Widget build(BuildContext context) {
     bool isIncome = _selectedType == 'income';
-    Color activeColor = isIncome
-        ? const Color(0xFF00C853)
-        : const Color(0xFFFF5252);
+    Color activeColor =
+        isIncome ? const Color(0xFF00C853) : const Color(0xFFFF5252);
     bool isEditMode = widget.existingTransaction != null;
+    double getDynamicFontSize(String text) {
+      int len = text.length;
+      if (len <= 8) return 48.0;
+      if (len <= 11) return 36.0;
+      if (len <= 14) return 28.0;
+      return 22.0;
+    }
+
+    double dynamicFontSize = getDynamicFontSize(_amountController.text);
 
     return Scaffold(
       backgroundColor: const Color(0xFF121212),
@@ -227,6 +232,9 @@ if (error == null) {
                     ),
                     TextField(
                       controller: _amountController,
+                      onChanged: (value) {
+                        setState(() {});
+                      },
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: false,
                         signed: false,
@@ -239,17 +247,17 @@ if (error == null) {
                       cursorColor: activeColor,
                       style: TextStyle(
                         color: activeColor,
-                        fontSize: 48,
+                        fontSize: dynamicFontSize,
                         fontWeight: FontWeight.w700,
                         letterSpacing: -1.5,
                       ),
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: "0",
-                        hintStyle: TextStyle(color: Colors.white24),
+                        hintStyle: const TextStyle(color: Colors.white24),
                         prefixText: "Rp ",
                         prefixStyle: TextStyle(
                           color: Colors.white,
-                          fontSize: 24,
+                          fontSize: (dynamicFontSize * 0.5).clamp(16.0, 24.0),
                           fontWeight: FontWeight.w600,
                         ),
                         border: InputBorder.none,
@@ -347,9 +355,8 @@ if (error == null) {
                                   ),
                                   child: Icon(
                                     cat['icon'],
-                                    color: isSelected
-                                        ? activeColor
-                                        : Colors.grey,
+                                    color:
+                                        isSelected ? activeColor : Colors.grey,
                                     size: 28,
                                   ),
                                 ),
@@ -379,7 +386,6 @@ if (error == null) {
                 ),
               ),
             ),
-
             Container(
               padding: const EdgeInsets.only(
                 left: 24,
@@ -437,9 +443,8 @@ if (error == null) {
 
   Widget _buildToggleTab(String type, String title) {
     bool isSelected = _selectedType == type;
-    Color activeColor = type == 'income'
-        ? const Color(0xFF00C853)
-        : const Color(0xFFFF5252);
+    Color activeColor =
+        type == 'income' ? const Color(0xFF00C853) : const Color(0xFFFF5252);
     return Expanded(
       child: GestureDetector(
         onTap: () => setState(() => _selectedType = type),
