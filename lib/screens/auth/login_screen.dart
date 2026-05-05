@@ -1,10 +1,12 @@
-import 'package:arthatrack/main_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:arthatrack/controllers/auth_controller.dart';
 import 'package:arthatrack/services/database_helper.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:arthatrack/src/core/app_routes.dart';
+import 'package:arthatrack/src/core/session_manager.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
@@ -28,8 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _loadLastUsername() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? lastUser = prefs.getString('last_username');
+    String? lastUser = SessionManager.lastUsername;
 
     if (lastUser != null && lastUser.isNotEmpty) {
       _usernameController.text = lastUser;
@@ -95,13 +96,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (errorMessage == null) {
       if (_isLogin) {
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.setString('last_username', username);
+        await SessionManager.saveLastUsername(username);
         _showMessage("Selamat Datang, $username!");
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainScreen()),
-        );
+        Navigator.pushReplacementNamed(context, AppRoutes.home);
       } else {
         _showMessage("Registrasi Berhasil! Silakan Login.");
         setState(() {
@@ -120,10 +117,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (errorMessage == null) {
       _showMessage("Login Biometrik Berhasil!");
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainScreen()),
-      );
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, AppRoutes.home);
     } else {
       _showMessage(errorMessage);
     }

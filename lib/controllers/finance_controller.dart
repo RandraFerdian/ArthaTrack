@@ -1,6 +1,6 @@
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arthatrack/services/database_helper.dart';
+import 'package:arthatrack/src/core/session_manager.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
@@ -10,8 +10,7 @@ class FinanceController {
   // ==========================================
 
   Future<int?> _getCurrentUserId() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('userId');
+    return SessionManager.userId;
   }
 
   Future<Position?> _getCurrentLocation() async {
@@ -167,12 +166,10 @@ class FinanceController {
       int result = await DatabaseHelper.instance.addMoneyToGoal(goalId, amount);
       if (result > 0) {
         await addTransaction(
-          title:
-              "Alokasi Target: $goalName", 
+          title: "Alokasi Target: $goalName",
           amount: amount,
-          type:
-              'expense', 
-          category: 'Investasi', 
+          type: 'expense',
+          category: 'Investasi',
           date: DateTime.now().toIso8601String(),
           isSystem: true,
         );
@@ -379,10 +376,7 @@ class FinanceController {
   Future<List<Map<String, dynamic>>> getTransactionsWithLocation(
       int month, int year) async {
     final db = await DatabaseHelper.instance.database;
-
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? currentUserId = prefs.getInt('userId');
-
+    int? currentUserId = SessionManager.userId;
     if (currentUserId == null) return [];
 
     // Menggunakan parameter yang dikirim dari UI

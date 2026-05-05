@@ -7,8 +7,8 @@ import 'package:arthatrack/screens/chat/chat_screen.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:sensors_plus/sensors_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:arthatrack/services/database_helper.dart';
+import 'package:arthatrack/src/core/session_manager.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -47,9 +47,7 @@ class _MainScreenState extends State<MainScreen> {
   void _initGyroscopeNavigation() {
     _gyroSubscription =
         gyroscopeEventStream().listen((GyroscopeEvent event) async {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      bool isGyroEnabled = prefs.getBool('gyro_enabled') ?? true;
-      if (!isGyroEnabled) return;
+      if (!SessionManager.gyroEnabled) return;
 
       final now = DateTime.now();
       if (now.difference(_lastTiltTime).inMilliseconds > 1000) {
@@ -68,8 +66,7 @@ class _MainScreenState extends State<MainScreen> {
 
   // [DIPERBAIKI] Mengambil foto langsung dari Database SQLite (Sama seperti ProfileScreen)
   Future<void> _loadProfileImage() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('userId');
+    int? userId = SessionManager.userId;
 
     if (userId != null) {
       final userData = await DatabaseHelper.instance.getUserById(userId);

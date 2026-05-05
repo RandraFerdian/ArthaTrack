@@ -5,7 +5,7 @@ import 'package:arthatrack/screens/transaction/add_transaction_screen.dart'; // 
 
 class TransactionHistoryScreen extends StatefulWidget {
   final String? initialFilter;
-  const TransactionHistoryScreen({super.key, this.initialFilter});
+  TransactionHistoryScreen({super.key, this.initialFilter});
 
   @override
   _TransactionHistoryScreenState createState() =>
@@ -33,8 +33,8 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
   }
 
   Future<void> _loadHistory() async {
-    List<Map<String, dynamic>> transactions = await _financeController
-        .getUserTransactions();
+    List<Map<String, dynamic>> transactions =
+        await _financeController.getUserTransactions();
 
     Set<String> monthsSet = {"Semua"};
     for (var trx in transactions) {
@@ -238,7 +238,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
-
               _buildDetailRow(
                 Icons.category_rounded,
                 "Kategori",
@@ -270,9 +269,7 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                       }
                     : null,
               ),
-
               const SizedBox(height: 32),
-
               Row(
                 children: [
                   Expanded(
@@ -330,7 +327,6 @@ class _TransactionHistoryScreenState extends State<TransactionHistoryScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-
               SizedBox(
                 width: double.infinity,
                 height: 55,

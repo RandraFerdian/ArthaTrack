@@ -1,18 +1,16 @@
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:arthatrack/screens/auth/login_screen.dart';
-import 'package:arthatrack/controllers/auth_controller.dart';
-import 'package:arthatrack/screens/profile/edit_profile_screen.dart';
 import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:arthatrack/screens/profile/change_password_screen.dart';
+import 'package:arthatrack/controllers/auth_controller.dart';
 import 'package:arthatrack/services/database_helper.dart';
-import 'package:arthatrack/screens/profile/feedback_screen.dart';
 import 'package:arthatrack/services/notification_helper.dart';
+import 'package:arthatrack/src/core/app_routes.dart';
+import 'package:arthatrack/src/core/session_manager.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.onProfileUpdated});
-  final VoidCallback? onProfileUpdated; 
+  final VoidCallback? onProfileUpdated;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -33,51 +31,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _loadUserData();
-    _loadPreferences(); 
+    _loadPreferences();
   }
 
   Future<void> _loadUserData() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('userId');
+    int? userId = SessionManager.userId;
 
     if (userId != null) {
       final userData = await DatabaseHelper.instance.getUserById(userId);
 
-      if (userData != null) {
-        String name = userData['username'] ?? "User";
-        String bio = userData['bio'] ?? "Belum ada bio";
-        String imagePath = userData['profile_image'] ?? "";
-
-        if (mounted) {
-          setState(() {
-            _userName = name;
-            _userBio = bio;
-            _profileImagePath = imagePath;
-          });
-        }
+      if (userData != null && mounted) {
+        setState(() {
+          _userName = userData['username'] ?? "User";
+          _userBio = userData['bio'] ?? "Belum ada bio";
+          _profileImagePath = userData['profile_image'] ?? "";
+        });
       }
     }
   }
 
   Future<void> _loadPreferences() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('userId');
+    int? userId = SessionManager.userId;
     bool bioStatus = false;
     if (userId != null) {
       bioStatus = await DatabaseHelper.instance.isBiometricEnabled(userId);
     }
 
-    setState(() {
-      _isGyroEnabled = prefs.getBool('gyro_enabled') ?? true;
-      _isAccelEnabled = prefs.getBool('accel_enabled') ?? true;
-      _isNotificationEnabled = prefs.getBool('notification_enabled') ?? true;
-      _isBiometricEnabled = bioStatus;
-    });
+    if (mounted) {
+      setState(() {
+        _isGyroEnabled = SessionManager.gyroEnabled;
+        _isAccelEnabled = SessionManager.prefs.getBool('accel_enabled') ?? true;
+        _isNotificationEnabled = SessionManager.notificationEnabled;
+        _isBiometricEnabled = bioStatus;
+      });
+    }
   }
 
   Future<void> _toggleBiometric(bool value) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('userId');
+    int? userId = SessionManager.userId;
     if (userId != null) {
       await DatabaseHelper.instance.updateBiometricStatus(userId, value);
     }
@@ -85,11 +76,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _toggleNotification(bool value) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('notification_enabled', value);
+    await SessionManager.setNotificationEnabled(value);
     setState(() => _isNotificationEnabled = value);
 
-    if (value == true) {
+    if (value) {
       await NotificationHelper.scheduleDailyReminder();
     } else {
       await NotificationHelper.cancelReminder();
@@ -97,14 +87,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _toggleGyro(bool value) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('gyro_enabled', value);
+    await SessionManager.setGyroEnabled(value);
     setState(() => _isGyroEnabled = value);
   }
 
   Future<void> _toggleAccel(bool value) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('accel_enabled', value);
+    await SessionManager.setAccelEnabled(value);
     setState(() => _isAccelEnabled = value);
   }
 
@@ -125,13 +113,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const Text("Batal", style: TextStyle(color: Colors.white70))),
           TextButton(
             onPressed: () async {
-              SharedPreferences prefs = await SharedPreferences.getInstance();
-              await prefs.setBool('isLoggedIn', false);
+              await SessionManager.clearSession();
               if (!mounted) return;
-              Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => LoginScreen()),
-                  (route) => false);
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                AppRoutes.login,
+                (route) => false,
+              );
             },
             child: const Text("Keluar",
                 style: TextStyle(
@@ -142,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-Future<void> _pickImage() async {
+  Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
@@ -251,12 +239,14 @@ Future<void> _pickImage() async {
                   IconButton(
                     icon: const Icon(Icons.edit_square, color: Colors.grey),
                     onPressed: () async {
-                      bool? updated = await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => EditProfileScreen(
-                                  currentName: _userName,
-                                  currentBio: _userBio)));
+                      bool? updated = await Navigator.pushNamed(
+                        context,
+                        AppRoutes.editProfile,
+                        arguments: {
+                          'currentName': _userName,
+                          'currentBio': _userBio,
+                        },
+                      );
                       if (updated == true) _loadUserData();
                       widget.onProfileUpdated?.call();
                     },
@@ -290,11 +280,8 @@ Future<void> _pickImage() async {
                     iconColor: Colors.orangeAccent,
                     title: "Ubah PIN / Password",
                     isAction: true,
-                    onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                const ChangePasswordScreen()))),
+                    onTap: () =>
+                        Navigator.pushNamed(context, AppRoutes.changePassword)),
               ],
             ),
             const SizedBox(height: 24),
@@ -314,14 +301,8 @@ Future<void> _pickImage() async {
                   title: "Feedback Matkul Mobile",
                   subtitle: "Berikan kesan & saran untuk TPM",
                   isAction: true,
-                  // [DIUBAH] Mengarahkan ke layar baru
                   onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const FeedbackScreen(),
-                      ),
-                    );
+                    Navigator.pushNamed(context, AppRoutes.feedback);
                   },
                 ),
               ],

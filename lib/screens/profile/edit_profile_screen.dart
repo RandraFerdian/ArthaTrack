@@ -7,7 +7,7 @@ class EditProfileScreen extends StatefulWidget {
   final String currentName;
   final String currentBio;
 
-  const EditProfileScreen({
+  EditProfileScreen({
     super.key,
     required this.currentName,
     required this.currentBio,

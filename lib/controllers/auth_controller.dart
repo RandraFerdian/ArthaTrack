@@ -1,6 +1,6 @@
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:arthatrack/services/database_helper.dart';
+import 'package:arthatrack/src/core/session_manager.dart';
 
 class AuthController {
   final LocalAuthentication auth = LocalAuthentication();
@@ -49,19 +49,16 @@ class AuthController {
       );
 
       if (didAuthenticate) {
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        int? userId = prefs.getInt('userId');
-        String? username = prefs.getString('username');
+        int? userId = SessionManager.userId;
+        String? username = SessionManager.username;
 
         if (userId != null && username != null) {
           await _saveSession(userId, username);
           return null; // Sukses
-        } else {
-          return "Sesi tidak ditemukan. Silakan login manual dulu.";
         }
-      } else {
-        return "Autentikasi biometrik dibatalkan.";
+        return "Sesi tidak ditemukan. Silakan login manual dulu.";
       }
+      return "Autentikasi biometrik dibatalkan.";
     } catch (e) {
       return "Biometrik error: $e";
     }
@@ -69,33 +66,23 @@ class AuthController {
 
   // 4. Logika Menyimpan Session (Private)
   Future<void> _saveSession(int userId, String username) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isLoggedIn', true);
-    await prefs.setInt('userId', userId);
-    await prefs.setString('username', username);
+    await SessionManager.saveSession(userId, username);
   }
 
   // 5. Logika Mengambil Nama User
   Future<String?> getLoggedInUserName() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('username');
+    return SessionManager.username;
   }
 
   // Logika untuk memperbarui profil user
   Future<String?> updateUserProfile(String newName, String newBio) async {
     try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      int? userId = prefs.getInt('userId');
+      int? userId = SessionManager.userId;
 
       if (userId != null) {
-        // [WAJIB ADA] Simpan ke Database!
         await DatabaseHelper.instance
             .updateUserProfile(userId, newName, newBio);
-
-        // (Opsional) Boleh tetap disimpan di SharedPreferences juga jika mau
-        await prefs.setString('username', newName);
-        await prefs.setString('user_bio', newBio);
-
+        await SessionManager.saveSession(userId, newName);
         return null; // Sukses, tidak ada error
       }
       return "User ID tidak ditemukan";
@@ -107,11 +94,9 @@ class AuthController {
 
   // --- CARI FUNGSI INI JUGA ---
   Future<void> updateProfileImage(String imagePath) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('userId');
+    int? userId = SessionManager.userId;
 
     if (userId != null) {
-      // [WAJIB ADA] Simpan ke Database!
       await DatabaseHelper.instance.updateProfileImage(userId, imagePath);
     }
   }
@@ -119,8 +104,7 @@ class AuthController {
   // [BARU] Logika untuk mengubah password
   Future<String?> changePassword(String oldPassword, String newPassword) async {
     try {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      int? userId = prefs.getInt('userId');
+      int? userId = SessionManager.userId;
 
       if (userId == null)
         return "Sesi user tidak ditemukan. Silakan login ulang.";
@@ -129,13 +113,16 @@ class AuthController {
       final user = await DatabaseHelper.instance.getUserById(userId);
       if (user == null) return "Data user tidak ditemukan di database.";
 
-      // 2. Verifikasi apakah password lama yang dimasukkan benar
-      if (user['password'] != oldPassword) {
+      final String oldHashed =
+          DatabaseHelper.instance.hashPassword(oldPassword);
+      if (user['password'] != oldHashed) {
         return "Password lama yang Anda masukkan salah!";
       }
 
-      // 3. Jika benar, update dengan password baru
-      await DatabaseHelper.instance.updatePassword(userId, newPassword);
+      await DatabaseHelper.instance.updatePassword(
+        userId,
+        DatabaseHelper.instance.hashPassword(newPassword),
+      );
       return null;
     } catch (e) {
       return "Terjadi kesalahan sistem: $e";
@@ -144,18 +131,18 @@ class AuthController {
 
   // [BARU] Ambil Bio/Jurusan
   Future<String> getUserBio() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('userBio') ?? "-";
+    int? userId = SessionManager.userId;
+    if (userId == null) return "-";
+
+    final user = await DatabaseHelper.instance.getUserById(userId);
+    return user?['bio'] ?? "-";
   }
 
-  // Mengambil lokasi file foto profil
   Future<String> getUserProfileImage() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    int? userId = prefs.getInt('userId');
+    int? userId = SessionManager.userId;
+    if (userId == null) return '';
 
-    if (userId != null) {
-      return prefs.getString('profile_image_$userId') ?? '';
-    }
-    return '';
+    final user = await DatabaseHelper.instance.getUserById(userId);
+    return user?['profile_image'] ?? '';
   }
 }

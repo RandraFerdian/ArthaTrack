@@ -9,7 +9,7 @@ class AddTransactionScreen extends StatefulWidget {
   final Map<String, dynamic>?
       existingTransaction; // Menyimpan data jika mode edit
 
-  const AddTransactionScreen({
+  AddTransactionScreen({
     super.key,
     this.initialType = 'expense',
     this.existingTransaction,

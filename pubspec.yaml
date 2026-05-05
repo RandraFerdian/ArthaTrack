@@ -32,14 +32,31 @@ dependencies:
   flutter_local_notifications: ^21.0.0
   flutter_svg: ^2.2.4
   timezone: ^0.11.0
+  flutter_markdown: ^0.7.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0
 
 flutter:
   uses-material-design: true
   assets:
     - .env
     - assets/dark_mode.png
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/logo.png"
+  adaptive_icon_background: "#121212"
+  adaptive_icon_foreground: "assets/logo.png"
+
+flutter_native_splash:
+  color: "#121212"
+  image: assets/dark_mode.png
+  android_12:
+    image: assets/dark_mode.png
+    color: "#121212"

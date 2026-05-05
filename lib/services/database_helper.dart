@@ -100,6 +100,8 @@ class DatabaseHelper {
     return digest.toString();
   }
 
+  String hashPassword(String password) => _hashPassword(password);
+
   // 1. Fungsi Register (Daftar User Baru)
   Future<int> registerUser(String username, String password) async {
     final db = await instance.database;
@@ -322,7 +324,7 @@ class DatabaseHelper {
     Database db = await instance.database;
     return await db.update(
       'users',
-      {'password': newPassword},
+      {'password': _hashPassword(newPassword)},
       where: 'id = ?',
       whereArgs: [userId],
     );

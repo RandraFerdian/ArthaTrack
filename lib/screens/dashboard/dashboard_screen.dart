@@ -3,18 +3,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:arthatrack/controllers/finance_controller.dart';
-import 'package:arthatrack/screens/transaction/add_transaction_screen.dart';
-import 'package:arthatrack/screens/transaction/currency_conversion_screen.dart';
-import 'package:arthatrack/controllers/currency_controller.dart';
-import 'package:arthatrack/screens/transaction/transaction_history_screen.dart';
-import 'package:arthatrack/controllers/auth_controller.dart';
-import 'package:arthatrack/screens/target/target_screen.dart';
-import 'package:arthatrack/screens/minigame/currency_quiz_screen.dart';
-import 'package:arthatrack/screens/timezone/time_conversion_screen.dart';
-import 'package:arthatrack/screens/chat/chat_screen.dart';
-import 'package:arthatrack/screens/map/expenditure_map_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:arthatrack/controllers/dashboard_controller.dart';
+import 'package:arthatrack/src/core/app_routes.dart';
+import 'package:arthatrack/src/core/session_manager.dart';
+import 'package:arthatrack/screens/dashboard/dashboard_widget.dart';
 
 class DashboardScreen extends StatefulWidget {
   @override
@@ -22,34 +14,23 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final FinanceController _financeController = FinanceController();
-  final CurrencyController _currencyController = CurrencyController();
-  final AuthController _authController = AuthController();
+  late DashboardController _controller;
 
-  double _totalBalance = 0.0;
-  double _displayBalance = 0.0;
-  List<Map<String, dynamic>> _recentTransactions = [];
-  String _selectedCurrency = 'IDR';
-  bool _isLoading = true;
-  bool _isConverting = false;
-  String _userName = "User";
-
-  StreamSubscription<UserAccelerometerEvent>? _accelerometerSubscription;
-  DateTime _lastRefreshTime = DateTime.now();
+  late StreamSubscription<UserAccelerometerEvent> _accelerometerSubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
+    _controller = DashboardController();
+    _controller.init();
+    _controller.loadDashboardData(() => setState(() {}));
     _initAccelerometer();
   }
 
   void _initAccelerometer() {
     _accelerometerSubscription = userAccelerometerEventStream()
         .listen((UserAccelerometerEvent event) async {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      bool isAccelEnabled = prefs.getBool('accel_enabled') ?? true;
-      if (!isAccelEnabled) return;
+      if (!SessionManager.accelEnabled) return;
 
       double acceleration = sqrt(
         pow(event.x, 2) + pow(event.y, 2) + pow(event.z, 2),
@@ -57,60 +38,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       if (acceleration > 15) {
         final now = DateTime.now();
-        if (now.difference(_lastRefreshTime).inSeconds > 3) {
-          _lastRefreshTime = now;
-          if (mounted) {
-            // Tampilkan notifikasi sinkronisasi
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                elevation: 0,
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: Colors.transparent,
-                margin: const EdgeInsets.only(bottom: 20, left: 20, right: 20),
-                duration: const Duration(milliseconds: 1500),
-                content: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                        color: const Color(0xFF3949AB).withOpacity(0.5),
-                        width: 1.5),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.sync_rounded,
-                          color: Color(0xFF8C9EFF), size: 22),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Sinkronisasi Selesai",
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14)),
-                            Text(
-                              "Data saldo & transaksi diperbarui",
-                              style:
-                                  TextStyle(color: Colors.grey, fontSize: 12),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
-          _loadDashboardData();
+        if (now.difference(_controller.lastRefreshTime).inSeconds > 3) {
+          _controller.lastRefreshTime = now;
+          _controller.loadDashboardData(() => setState(() {}));
         }
       }
     });
@@ -118,48 +48,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
-    _accelerometerSubscription?.cancel();
+    _accelerometerSubscription.cancel();
     super.dispose();
-  }
-
-  Future<void> _loadDashboardData() async {
-    setState(() => _isLoading = true);
-    double balance = await _financeController.getTotalBalance();
-    List<Map<String, dynamic>> transactions =
-        await _financeController.getUserTransactions();
-    String? name = await _authController.getLoggedInUserName();
-
-    setState(() {
-      _totalBalance = balance;
-      _displayBalance = balance;
-      _recentTransactions = transactions;
-      _userName = name ?? "User";
-      _isLoading = false;
-      _selectedCurrency = 'IDR';
-    });
-  }
-
-  Future<void> _changeDisplayCurrency(String code) async {
-    if (code == 'IDR') {
-      setState(() {
-        _displayBalance = _totalBalance;
-        _selectedCurrency = 'IDR';
-      });
-      return;
-    }
-    setState(() => _isConverting = true);
-    double? result = await _currencyController.convertCurrency(
-      fromCurrency: 'IDR',
-      toCurrency: code,
-      amount: _totalBalance,
-    );
-    setState(() {
-      _isConverting = false;
-      if (result != null) {
-        _displayBalance = result;
-        _selectedCurrency = code;
-      }
-    });
   }
 
   void _showCurrencySelector() {
@@ -177,13 +67,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     title: Text(code,
                         style: const TextStyle(
                             color: Colors.white, fontWeight: FontWeight.bold)),
-                    trailing: _selectedCurrency == code
+                    trailing: _controller.selectedCurrency == code
                         ? const Icon(Icons.check_circle,
                             color: Color(0xFF00C853))
                         : null,
                     onTap: () {
                       Navigator.pop(context);
-                      _changeDisplayCurrency(code);
+                      _controller.changeDisplayCurrency(
+                          code, () => setState(() {}));
                     },
                   ))
               .toList(),
@@ -192,63 +83,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  String _formatDisplay(double amount, String code) {
-    int decimals = (code == 'IDR' || code == 'JPY') ? 0 : 2;
-    String amountStr = amount.toStringAsFixed(decimals);
-    List<String> parts = amountStr.split('.');
-    String formattedInteger = parts[0].replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
-    String finalAmount =
-        parts.length > 1 ? "$formattedInteger.${parts[1]}" : formattedInteger;
-    if (code == 'IDR') return "Rp $finalAmount";
-    return "$code $finalAmount";
-  }
-
-  // =========================================================
-  // FUNGSI NAVIGASI GLOBAL (Digunakan tombol dan Search)
-  // =========================================================
-  Future<void> _navigateToFeature(String actionId) async {
-    if (actionId == "income" || actionId == "expense") {
-      bool? shouldRefresh = await Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (context) => AddTransactionScreen(initialType: actionId)),
-      );
-      if (shouldRefresh == true) _loadDashboardData();
-    } else if (actionId == "conversion") {
-      Navigator.push(context,
-          MaterialPageRoute(builder: (context) => CurrencyConversionScreen()));
-    } else if (actionId == "target") {
-      Navigator.push(context,
-          MaterialPageRoute(builder: (context) => const TargetScreen()));
-    } else if (actionId == "game") {
-      Navigator.push(context,
-          MaterialPageRoute(builder: (context) => const CurrencyQuizScreen()));
-    } else if (actionId == "time_conversion") {
-      Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) => const TimeConversionScreen()));
-    } else if (actionId == "chat_ai") {
-      Navigator.push(
-          context, MaterialPageRoute(builder: (context) => const ChatScreen()));
-    } else if (actionId == "maps") {
-      Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) => const ExpenditureMapScreen()));
-    } else if (actionId == "history") {
-      Navigator.push(
-              context,
-              MaterialPageRoute(
-                  builder: (context) => const TransactionHistoryScreen()))
-          .then((_) => _loadDashboardData());
-    }
-  }
-
-  // =========================================================
-  // FUNGSI MODAL DETAIL TRANSAKSI
-  // =========================================================
   void _showTransactionDetail(Map<String, dynamic> trx, String displayAmount) {
     bool isIncome = trx['type'] == 'income';
     bool hasLocation = trx['latitude'] != null && trx['longitude'] != null;
@@ -367,13 +201,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
-                        Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) => AddTransactionScreen(
-                                        initialType: trx['type'],
-                                        existingTransaction: trx)))
-                            .then((_) => _loadDashboardData());
+                        Navigator.pushNamed(
+                          context,
+                          AppRoutes.addTransaction,
+                          arguments: {
+                            'initialType': trx['type'],
+                            'existingTransaction': trx,
+                          },
+                        ).then((_) => _controller
+                            .loadDashboardData(() => setState(() {})));
                       },
                       icon:
                           const Icon(Icons.edit_outlined, color: Colors.white),
@@ -431,8 +267,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               Navigator.pop(context);
-              await _financeController.deleteTransaction(id);
-              _loadDashboardData();
+              await _controller.deleteTransaction(id);
+              _controller.loadDashboardData(() => setState(() {}));
               ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Transaksi dihapus")));
             },
@@ -502,7 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Text("Selamat Datang,",
                 style: TextStyle(color: Colors.grey, fontSize: 14)),
-            Text(_userName,
+            Text(_controller.userName,
                 style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
@@ -510,7 +346,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
         actions: [
-          // [DIPERBAIKI] Lonceng diganti dengan Search Icon
           IconButton(
             icon:
                 const Icon(Icons.search_rounded, color: Colors.white, size: 28),
@@ -522,18 +357,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               );
               // Jika user memilih sesuatu, pindah ke halaman tersebut
               if (selectedFeature != null) {
-                _navigateToFeature(selectedFeature);
+                _controller.navigateToFeature(context, selectedFeature);
               }
             },
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: _isLoading
+      body: _controller.isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF00C853)))
           : RefreshIndicator(
-              onRefresh: _loadDashboardData,
+              onRefresh: () async =>
+                  _controller.loadDashboardData(() => setState(() {})),
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 padding: const EdgeInsets.all(20.0),
@@ -541,44 +377,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // KARTU SALDO
-                    GestureDetector(
+                    BalanceCard(
+                      selectedCurrency: _controller.selectedCurrency,
+                      isConverting: _controller.isConverting,
+                      formattedBalance: _controller.formatCurrency(
+                          _controller.displayBalance,
+                          _controller.selectedCurrency),
                       onTap: _showCurrencySelector,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                                colors: [Color(0xFF1A237E), Color(0xFF0D47A1)]),
-                            borderRadius: BorderRadius.circular(24)),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text("Total Saldo",
-                                    style: TextStyle(
-                                        color: Colors.white70, fontSize: 16)),
-                                Text(_selectedCurrency,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold)),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            _isConverting
-                                ? const CircularProgressIndicator(
-                                    color: Colors.white)
-                                : Text(
-                                    _formatDisplay(
-                                        _displayBalance, _selectedCurrency),
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
                     ),
                     const SizedBox(height: 24),
 
@@ -597,22 +402,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisSpacing: 10,
                       childAspectRatio: 0.9,
                       children: [
-                        _buildActionButton(Icons.add_circle_outline_rounded,
-                            "Pemasukan", Colors.green, "income"),
-                        _buildActionButton(Icons.remove_circle_outline_rounded,
-                            "Pengeluaran", Colors.redAccent, "expense"),
-                        _buildActionButton(Icons.currency_exchange_rounded,
-                            "Konversi", Colors.orange, "conversion"),
-                        _buildActionButton(Icons.map_rounded, "Peta Lokasi",
-                            Colors.teal, "maps"),
-                        _buildActionButton(Icons.language_rounded, "Timezone",
-                            Colors.blue, "time_conversion"),
-                        _buildActionButton(Icons.track_changes_rounded,
-                            "Target", Colors.indigo, "target"),
-                        _buildActionButton(Icons.auto_awesome_rounded,
-                            "Chat AI", Colors.amber, "chat_ai"),
-                        _buildActionButton(Icons.sports_esports_rounded, "Game",
-                            Colors.purpleAccent, "game"),
+                        ActionButton(
+                            icon: Icons.add_circle_outline_rounded,
+                            label: "Pemasukan",
+                            color: Colors.green,
+                            onTap: () => _controller.navigateToFeature(
+                                context, "income")),
+                        ActionButton(
+                            icon: Icons.remove_circle_outline_rounded,
+                            label: "Pengeluaran",
+                            color: Colors.redAccent,
+                            onTap: () => _controller.navigateToFeature(
+                                context, "expense")),
+                        ActionButton(
+                            icon: Icons.currency_exchange_rounded,
+                            label: "Konversi",
+                            color: Colors.orange,
+                            onTap: () => _controller.navigateToFeature(
+                                context, "conversion")),
+                        ActionButton(
+                            icon: Icons.map_rounded,
+                            label: "Peta Lokasi",
+                            color: Colors.teal,
+                            onTap: () =>
+                                _controller.navigateToFeature(context, "maps")),
+                        ActionButton(
+                            icon: Icons.language_rounded,
+                            label: "Timezone",
+                            color: Colors.blue,
+                            onTap: () => _controller.navigateToFeature(
+                                context, "time_conversion")),
+                        ActionButton(
+                            icon: Icons.track_changes_rounded,
+                            label: "Target",
+                            color: Colors.indigo,
+                            onTap: () => _controller.navigateToFeature(
+                                context, "target")),
+                        ActionButton(
+                            icon: Icons.auto_awesome_rounded,
+                            label: "Chat AI",
+                            color: Colors.amber,
+                            onTap: () => _controller.navigateToFeature(
+                                context, "chat_ai")),
+                        ActionButton(
+                            icon: Icons.sports_esports_rounded,
+                            label: "Game",
+                            color: Colors.purpleAccent,
+                            onTap: () =>
+                                _controller.navigateToFeature(context, "game")),
                       ],
                     ),
                     const SizedBox(height: 10),
@@ -627,7 +464,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold)),
                         GestureDetector(
-                          onTap: () => _navigateToFeature("history"),
+                          onTap: () =>
+                              _controller.navigateToFeature(context, "history"),
                           child: const Text("Lihat Semua",
                               style: TextStyle(
                                   color: Color(0xFF00C853),
@@ -637,89 +475,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    _recentTransactions.isEmpty
+                    _controller.recentTransactions.isEmpty
                         ? const Center(
                             child: Text("Belum ada transaksi.",
                                 style: TextStyle(color: Colors.grey)))
                         : ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _recentTransactions.length > 5
+                            itemCount: _controller.recentTransactions.length > 5
                                 ? 5
-                                : _recentTransactions.length,
+                                : _controller.recentTransactions.length,
                             itemBuilder: (context, index) {
-                              final trx = _recentTransactions[index];
-                              bool isIncome = trx['type'] == 'income';
-                              String amountStr =
-                                  _formatDisplay(trx['amount'], 'IDR');
+                              final trx = _controller.recentTransactions[index];
+                              String amountStr = _controller.formatCurrency(
+                                  trx['amount'], 'IDR');
 
-                              return Card(
-                                color: const Color(0xFF1E1E1E),
-                                margin: const EdgeInsets.only(bottom: 12),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16)),
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(16),
-                                  onTap: () =>
-                                      _showTransactionDetail(trx, amountStr),
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Row(
-                                      children: [
-                                        CircleAvatar(
-                                            backgroundColor: isIncome
-                                                ? Colors.green.withOpacity(0.2)
-                                                : Colors.redAccent
-                                                    .withOpacity(0.2),
-                                            child: Icon(
-                                                isIncome
-                                                    ? Icons.arrow_downward
-                                                    : Icons.arrow_upward,
-                                                color: isIncome
-                                                    ? Colors.green
-                                                    : Colors.redAccent)),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(trx['title'],
-                                                  style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 12),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis),
-                                              Text(trx['category'],
-                                                  style: const TextStyle(
-                                                      color: Colors.grey,
-                                                      fontSize: 12)),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Flexible(
-                                          flex: 2,
-                                          child: Text(
-                                              "${isIncome ? '+' : '-'} $amountStr",
-                                              style: TextStyle(
-                                                  color: isIncome
-                                                      ? Colors.green
-                                                      : Colors.redAccent,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12),
-                                              textAlign: TextAlign.right,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+                              return TransactionCard(
+                                trx: trx,
+                                amountStr: amountStr,
+                                onTap: () =>
+                                    _showTransactionDetail(trx, amountStr),
                               );
                             },
                           ),
@@ -730,34 +505,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // [DIPERBAIKI] Menggunakan fungsi _navigateToFeature agar sejalan dengan pencarian
-  Widget _buildActionButton(
-      IconData icon, String label, Color color, String actionId) {
-    return GestureDetector(
-      onTap: () => _navigateToFeature(actionId),
-      child: Column(
-        children: [
-          Container(
-            width: 55,
-            height: 55,
-            decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: color.withOpacity(0.1))),
-            child: Icon(icon, color: color, size: 26),
-          ),
-          const SizedBox(height: 6),
-          Text(label,
-              style: const TextStyle(
-                  color: Colors.grey,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis),
-        ],
-      ),
-    );
-  }
 }
 
 // =========================================================
