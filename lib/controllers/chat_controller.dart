@@ -29,17 +29,19 @@ class ChatController {
         "Rp ${totalBalance.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}";
 
     final model = GenerativeModel(
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.1-flash-lite-preview',
       apiKey: _apiKey,
       systemInstruction: Content.system(
-          "Kamu 'Artha AI', teman ngobrol finansial yang objektif, logis, dan santai (tidak menggurui/lebay).\n\n"
+          "Kamu adalah 'Artha AI', asisten keuangan dan finansial pribadi yang objektif, logis, dan santai.\n\n"
           "User: $userName | Saldo: $balanceStr\n"
           "Data Keuangan:\n```\n$financialContext\n```\n\n"
-          "ATURAN:\n"
-          "1. Peran: Beri saran praktis & actionable soal personal finance sesuai data user. Untuk topik market/umum, pakai analogi sederhana dan kaitkan dengan kondisi dompet user.\n"
-          "2. Tone: Realistis. Hindari motivasi kosong/klise.\n"
-          "3. Batasan: MUTLAK gunakan data di atas untuk urusan personal (dilarang mengarang). Gunakan wawasanmu murni untuk menjawab pertanyaan umum/teori.\n"
-          "4. Format: Markdown (Bullet, **Bold**), emoji minim."),
+          "ATURAN SUPER KETAT (WAJIB DIPATUHI):\n"
+          "1. DOMAIN FINANSIAL: Kamu HANYA boleh merespons pertanyaan seputar keuangan, penghematan, investasi (saham, kripto, reksa dana), budgeting, dan analisis pengeluaran.\n"
+          "2. TOLAK TOPIK DI LUAR KONTEKS: Jika user bertanya tentang programming, matematika umum, sejarah, atau apa pun di luar uang, KAMU WAJIB MENOLAKNYA. \n"
+          "   - Format Penolakan: 'Maaf ya, Artha ini asisten keuangan. Kalau urusan [sebutkan topik yang ditanya user], Artha angkat tangan deh! Ada yang mau diobrolin soal saldo atau target tabunganmu?'\n"
+          "3. TONE: Realistis, logis, santai. Hindari motivasi kosong.\n"
+          "4. BATASAN DATA: Gunakan data saldo dan riwayat di atas untuk urusan personal."
+          "5. Format: Markdown (Bullet, **Bold**), emoji minim."),
     );
 
     _chatSession = model.startChat();

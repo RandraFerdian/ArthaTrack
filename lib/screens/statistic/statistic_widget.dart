@@ -13,6 +13,7 @@ class SummaryCard extends StatelessWidget {
   final Color color;
   final IconData icon;
   final String actionId;
+  final DateTime selectedMonth; // Tambahan baru: menerima info bulan
 
   const SummaryCard({
     super.key,
@@ -21,6 +22,7 @@ class SummaryCard extends StatelessWidget {
     required this.color,
     required this.icon,
     required this.actionId,
+    required this.selectedMonth, // Wajib diisi
   });
 
   @override
@@ -34,7 +36,11 @@ class SummaryCard extends StatelessWidget {
         onTap: () => Navigator.pushNamed(
           context,
           AppRoutes.transactionHistory,
-          arguments: {'initialFilter': actionId},
+          arguments: {
+            'initialFilter': actionId,
+            'filterMonth': selectedMonth.month, // Bawa info bulan ke History
+            'filterYear': selectedMonth.year, // Bawa info tahun ke History
+          },
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -104,8 +110,8 @@ class FinancialStatus extends StatelessWidget {
           Expanded(
             child: Text(
               isHealthy
-                  ? "Keuanganmu 30 hari terakhir stabil. Pertahankan!"
-                  : "Awas! Pengeluaranmu 30 hari terakhir lebih besar dari pemasukan.",
+                  ? "Arus kas di bulan ini stabil. Pertahankan!"
+                  : "Awas! Pengeluaranmu di bulan ini lebih besar dari pemasukan.",
               style: AppFont.bodyMedium
                   .copyWith(color: statusColor, fontWeight: FontWeight.w600),
             ),
@@ -386,6 +392,162 @@ class LegendItem extends StatelessWidget {
                     overflow: TextOverflow.ellipsis)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 6. GRAFIK DISTRIBUSI PENGELUARAN (DONUT)
+// ==========================================
+class DistributionChartCard extends StatelessWidget {
+  final bool isEmpty;
+  final List<PieChartSectionData> sections;
+  final int touchedIndex;
+  final List<MapEntry<String, double>> categoryDataList;
+  final double monthlyExpense;
+  final Map<String, Color> categoryColors;
+  final String Function(double) formatRupiah;
+  final Function(int) onTouch;
+  final Function(int) onLegendTap;
+
+  const DistributionChartCard({
+    super.key,
+    required this.isEmpty,
+    required this.sections,
+    required this.touchedIndex,
+    required this.categoryDataList,
+    required this.monthlyExpense,
+    required this.categoryColors,
+    required this.formatRupiah,
+    required this.onTouch,
+    required this.onLegendTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const headerColor = Colors.orangeAccent;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header ala TrendChart
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: headerColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.pie_chart_rounded,
+                    color: headerColor, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Text("Distribusi Pengeluaran", style: AppFont.h4),
+            ],
+          ),
+          const SizedBox(height: 32),
+
+          // Isi Body
+          if (isEmpty)
+            Container(
+              height: 180,
+              alignment: Alignment.center,
+              child: Text("Belum ada pengeluaran di bulan ini.",
+                  style: AppFont.subtitle),
+            )
+          else
+            Column(
+              children: [
+                // 1. PIE CHART
+                SizedBox(
+                  height: 220,
+                  child: PieChart(
+                    PieChartData(
+                      pieTouchData: PieTouchData(
+                        touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                          if (!event.isInterestedForInteractions ||
+                              pieTouchResponse == null ||
+                              pieTouchResponse.touchedSection == null) {
+                            onTouch(-1);
+                            return;
+                          }
+                          onTouch(pieTouchResponse
+                              .touchedSection!.touchedSectionIndex);
+                        },
+                      ),
+                      borderData: FlBorderData(show: false),
+                      sectionsSpace: 4,
+                      centerSpaceRadius: 50,
+                      sections: sections,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // 2. INFO KOTAK KATEGORI DIPILIH
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceVariant,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: touchedIndex == -1
+                          ? Colors.transparent
+                          : categoryColors[categoryDataList[touchedIndex].key]!
+                              .withOpacity(0.5),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        touchedIndex == -1
+                            ? "Total Pengeluaran Bulan Ini"
+                            : "Pengeluaran ${categoryDataList[touchedIndex].key}",
+                        style: AppFont.bodySmall.copyWith(
+                          color: touchedIndex == -1
+                              ? AppColors.textSecondary
+                              : categoryColors[
+                                  categoryDataList[touchedIndex].key],
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        formatRupiah(touchedIndex == -1
+                            ? monthlyExpense
+                            : categoryDataList[touchedIndex].value),
+                        style: AppFont.h2,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // 3. DAFTAR LEGEND (KATEGORI BAWAH)
+                ...categoryDataList.asMap().entries.map((entry) => LegendItem(
+                      index: entry.key,
+                      touchedIndex: touchedIndex,
+                      category: entry.value.key,
+                      amount: entry.value.value,
+                      color: categoryColors[entry.value.key] ?? Colors.grey,
+                      formattedAmount: formatRupiah(entry.value.value),
+                      onTap: () => onLegendTap(
+                          touchedIndex == entry.key ? -1 : entry.key),
+                    )),
+              ],
+            ),
+        ],
       ),
     );
   }

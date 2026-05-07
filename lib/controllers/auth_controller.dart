@@ -38,7 +38,7 @@ class AuthController {
   }
 
   // 3. Logika Login Biometrik
-  Future<String?> loginWithBiometric() async {
+  Future<String?> loginWithBiometric(String currentUsername) async {
     try {
       bool canCheckBiometrics = await auth.canCheckBiometrics;
       if (!canCheckBiometrics) return "Perangkat tidak mendukung biometrik.";
@@ -47,13 +47,12 @@ class AuthController {
         localizedReason: 'Scan sidik jari untuk masuk ke ArthaTrack',
         options: const AuthenticationOptions(biometricOnly: true),
       );
-
       if (didAuthenticate) {
-        int? userId = SessionManager.userId;
-        String? username = SessionManager.username;
+        final user =
+            await DatabaseHelper.instance.getUserByUsername(currentUsername);
 
-        if (userId != null && username != null) {
-          await _saveSession(userId, username);
+        if (user != null) {
+          await _saveSession(user['id'], user['username']);
           return null; // Sukses
         }
         return "Sesi tidak ditemukan. Silakan login manual dulu.";
@@ -121,7 +120,7 @@ class AuthController {
 
       await DatabaseHelper.instance.updatePassword(
         userId,
-        DatabaseHelper.instance.hashPassword(newPassword),
+        newPassword,
       );
       return null;
     } catch (e) {

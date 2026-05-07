@@ -341,7 +341,7 @@ class FinanceController {
       final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
       if (apiKey.isEmpty) return "API Key tidak ditemukan.";
 
-      final model = GenerativeModel(model: 'gemini-2.5-flash', apiKey: apiKey);
+      final model = GenerativeModel(model: 'gemini-3.1-flash-lite-preview', apiKey: apiKey);
 
       // Ambil data untuk konteks
       double balance = await getTotalBalance();
@@ -350,13 +350,16 @@ class FinanceController {
         DateTime.now().month,
         DateTime.now().year,
       );
+      String financialContext = await getAIFinancialContext();
 
       String prompt = "";
       if (type == 'statistic') {
         prompt =
-            "Berikan 1 kalimat saran keuangan singkat dan sangat spesifik (maksimal 20 kata) untuk user dengan data: "
-            "Saldo Rp ${balance.toStringAsFixed(0)}, Pemasukan Rp ${summary['income']}, Pengeluaran Rp ${summary['expense']}. "
-            "Gunakan bahasa Indonesia yang gaul dan tambahkan emoji.";
+            "Kamu adalah Artha AI, asisten keuangan pribadi yang objektif, logis, dan santai. "
+            "Berdasarkan data: Saldo Rp ${balance.toStringAsFixed(0)}, Masuk Rp ${summary['income']}, Keluar Rp ${summary['expense']}, "
+            "serta histori transaksi: $financialContext. "
+            "Berikan 1 kalimat saran keuangan yang sangat spesifik (maksimal 20 kata). "
+            "Analisis datanya, tegur atau komentari langsung kebiasaan belanjanya dengan gaya bahasa santai tapi realistis (jangan beri motivasi kosong/berlebihan). Akhiri dengan 1 emoji.";
       } else {
         prompt =
             "Berikan 1 kalimat motivasi menabung singkat (maksimal 20 kata) berdasarkan data target ini: "

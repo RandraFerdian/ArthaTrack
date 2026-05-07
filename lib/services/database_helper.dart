@@ -319,6 +319,16 @@ class DatabaseHelper {
     return result.isNotEmpty ? result.first : null;
   }
 
+  Future<Map<String, dynamic>?> getUserByUsername(String username) async {
+    Database db = await instance.database;
+    List<Map<String, dynamic>> result = await db.query(
+      'users',
+      where: 'username = ?',
+      whereArgs: [username],
+    );
+    return result.isNotEmpty ? result.first : null;
+  }
+
   // [BARU] Memperbarui password user
   Future<int> updatePassword(int userId, String newPassword) async {
     Database db = await instance.database;

@@ -5,7 +5,8 @@ import 'package:arthatrack/src/core/app_colors.dart';
 import 'package:arthatrack/src/core/app_font.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({super.key, this.isFromNavbar = false});
+  final bool isFromNavbar;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -38,18 +39,21 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
-    double dynamicBottomPadding = isKeyboardOpen ? 24 : 110;
+    double dynamicBottomPadding =
+        isKeyboardOpen ? 24 : (widget.isFromNavbar ? 110 : 30);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors
-            .transparent, // Dibuat transparan agar menyatu dengan background
+            .transparent, 
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: AppColors.textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
+        leading: widget.isFromNavbar
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: AppColors.textPrimary, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -136,15 +140,14 @@ class _ChatScreenState extends State<ChatScreen> {
             Container(
               padding: EdgeInsets.fromLTRB(16, 12, 16, dynamicBottomPadding),
               decoration: BoxDecoration(
-                color:
-                    AppColors.surface.withOpacity(0.95), 
+                color: AppColors.surface.withOpacity(0.95),
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(30)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.3),
                     blurRadius: 20,
-                    offset: const Offset(0, -5), 
+                    offset: const Offset(0, -5),
                   ),
                 ],
               ),

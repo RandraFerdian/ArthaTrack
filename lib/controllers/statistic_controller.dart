@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+// Lokasi: lib/controllers/statistic_controller.dart
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:arthatrack/controllers/finance_controller.dart';
 
@@ -7,17 +8,17 @@ class StatisticController {
 
   bool isLoading = true;
 
-  // --- Data 30 Hari Terakhir (Untuk Kartu & Grafik Garis) ---
+  // --- Data Per Bulan Kalender (Untuk Summary Card & Pie Chart) ---
+  DateTime currentDate = DateTime.now();
   double income = 0.0;
   double expense = 0.0;
   double net = 0.0;
+  double monthlyExpense = 0.0;
+  List<MapEntry<String, double>> categoryDataList = [];
+
+  // --- Data 30 Hari Terakhir (Hanya Untuk Grafik Tren Garis) ---
   List<FlSpot> chartSpots = [];
   late DateTime chartStartDate;
-
-  // --- Data Per Bulan Kalender (Untuk Pie Chart) ---
-  DateTime currentDate = DateTime.now();
-  double monthlyExpense = 0.0; // Total pengeluaran khusus di bulan terpilih
-  List<MapEntry<String, double>> categoryDataList = [];
 
   int touchedIndex = -1;
   String aiInsight = "Tekan tombol di bawah untuk mendapatkan analisis pintar!";
@@ -32,34 +33,51 @@ class StatisticController {
         await _financeController.getUserTransactions();
 
     // ========================================================
-    // 1. HITUNG DATA 30 HARI TERAKHIR (Summary & Line Chart)
+    // PERSIAPAN RENTANG WAKTU
     // ========================================================
     DateTime now = DateTime.now();
+
+    // Rentang untuk Tren (Paten 30 Hari Kebelakang)
     chartStartDate = DateTime(now.year, now.month, now.day)
         .subtract(const Duration(days: 30));
-    DateTime endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+    DateTime endOfToday = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    // Rentang untuk Summary Card (Berdasarkan Bulan yang Dipilih)
+    DateTime startOfMonth = DateTime(currentDate.year, currentDate.month, 1);
+    // Mengambil hari terakhir di bulan tersebut
+    DateTime endOfMonth =
+        DateTime(currentDate.year, currentDate.month + 1, 0, 23, 59, 59);
 
     double tempIncome = 0.0;
     double tempExpense = 0.0;
     double previousBalance = 0.0;
     Map<int, double> dailyNet = {for (var i = 0; i <= 30; i++) i: 0.0};
 
+    // ========================================================
+    // 1. LOOPING TRANSAKSI (Filter Data)
+    // ========================================================
     for (var trx in allTrx) {
       try {
         DateTime date = DateTime.parse(trx['date']);
         double amount = trx['amount'] ?? 0.0;
         bool isIncome = trx['type'] == 'income';
 
-        if (date.isBefore(chartStartDate)) {
-          previousBalance += isIncome ? amount : -amount;
-        } else if (date
-                .isAfter(chartStartDate.subtract(const Duration(seconds: 1))) &&
-            date.isBefore(endOfDay.add(const Duration(seconds: 1)))) {
+        // --- A. Hitung Untuk Summary Card (Bulan Ini) ---
+        if (date.isAfter(startOfMonth.subtract(const Duration(seconds: 1))) &&
+            date.isBefore(endOfMonth.add(const Duration(seconds: 1)))) {
           if (isIncome) {
             tempIncome += amount;
           } else {
             tempExpense += amount;
           }
+        }
+
+        // --- B. Hitung Untuk Grafik Tren (30 Hari Terakhir) ---
+        if (date.isBefore(chartStartDate)) {
+          previousBalance += isIncome ? amount : -amount;
+        } else if (date
+                .isAfter(chartStartDate.subtract(const Duration(seconds: 1))) &&
+            date.isBefore(endOfToday.add(const Duration(seconds: 1)))) {
           int dayOffset = date.difference(chartStartDate).inDays;
           if (dayOffset >= 0 && dayOffset <= 30) {
             dailyNet[dayOffset] =
@@ -69,16 +87,18 @@ class StatisticController {
       } catch (e) {}
     }
 
+    // Assign hasil Summary ke variabel utama
+    income = tempIncome;
+    expense = tempExpense;
+    net = tempIncome - tempExpense;
+
+    // Build Grafik Garis
     List<FlSpot> spots = [];
     double runningTotal = previousBalance;
     for (int i = 0; i <= 30; i++) {
       runningTotal += dailyNet[i]!;
       spots.add(FlSpot(i.toDouble(), runningTotal));
     }
-
-    income = tempIncome;
-    expense = tempExpense;
-    net = tempIncome - tempExpense;
     chartSpots = spots;
 
     // ========================================================
@@ -89,7 +109,6 @@ class StatisticController {
       currentDate.year,
     );
 
-    // Hitung total pengeluaran bulan ini saja untuk referensi persentase
     double tempMonthlyExpense = 0.0;
     categoryData.forEach((key, value) => tempMonthlyExpense += value);
     monthlyExpense = tempMonthlyExpense;

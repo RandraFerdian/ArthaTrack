@@ -34,8 +34,8 @@ class _MainScreenState extends State<MainScreen> {
     _pages = [
       DashboardScreen(),
       StatisticScreen(),
-      const ChatScreen(),
-      const TargetScreen(),
+      const ChatScreen(isFromNavbar: true),
+      const TargetScreen(isFromNavbar: true,),
       ProfileScreen(
           onProfileUpdated: _loadProfileImage), // [BARU] Jalur Sinkronisasi
     ];

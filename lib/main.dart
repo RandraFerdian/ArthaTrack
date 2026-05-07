@@ -9,6 +9,7 @@ Future<void> main() async {
   await dotenv.load(fileName: '.env');
   await NotificationHelper.init();
   await SessionManager.init();
+  await SessionManager.clearSession();
 
   runApp(const ArthaTrackApp());
 }

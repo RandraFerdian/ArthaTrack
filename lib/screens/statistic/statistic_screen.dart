@@ -1,3 +1,5 @@
+// Lokasi: lib/screens/statistic/statistic_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -106,7 +108,6 @@ class _StatisticScreenState extends State<StatisticScreen> {
   }
 
   List<PieChartSectionData> _buildDonutChartSections() {
-    // Menggunakan monthlyExpense untuk persentase di Pie Chart
     if (_controller.monthlyExpense == 0) return [];
 
     return _controller.categoryDataList.asMap().entries.map((entry) {
@@ -181,80 +182,11 @@ class _StatisticScreenState extends State<StatisticScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // LABEL 30 HARI TERAKHIR (Untuk Kartu atas)
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 8),
-                        decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(20)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.history_rounded,
-                                color: AppColors.textSecondary, size: 16),
-                            const SizedBox(width: 8),
-                            Flexible(
-                                child: Text("30 Hari Terakhir",
-                                    style: AppFont.bodyMedium
-                                        .copyWith(fontWeight: FontWeight.bold),
-                                    overflow: TextOverflow.ellipsis)),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // SUMMARY CARDS (30 HARI)
+                    
+                    //BAGIAN 1: RINGKASAN BULANAN (Dinamic Month)
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Expanded(
-                            child: SummaryCard(
-                                title: "Pemasukan",
-                                formattedAmount: _controller
-                                    .formatRupiah(_controller.income),
-                                color: AppColors.primary,
-                                icon: Icons.arrow_downward_rounded,
-                                actionId: "income")),
-                        const SizedBox(width: 16),
-                        Expanded(
-                            child: SummaryCard(
-                                title: "Pengeluaran",
-                                formattedAmount: _controller
-                                    .formatRupiah(_controller.expense),
-                                color: AppColors.error,
-                                icon: Icons.arrow_upward_rounded,
-                                actionId: "expense")),
-                      ],
-                    ),
-
-                    // STATUS & TREND (30 HARI)
-                    FinancialStatus(
-                        income: _controller.income,
-                        expense: _controller.expense),
-                    const SizedBox(height: 32),
-                    TrendChart(
-                        spots: _controller.chartSpots,
-                        startDate: _controller.chartStartDate,
-                        formatRupiah: _controller.formatRupiah),
-                    const SizedBox(height: 32),
-
-                    // AI INSIGHT
-                    ArthaInsightCard(
-                        insight: _controller.aiInsight,
-                        isFetching: _controller.isFetchingAI,
-                        onFetch: () =>
-                            _controller.fetchAIInsight(() => setState(() {}))),
-                    const SizedBox(height: 32),
-
-                    // DISTRIBUSI PENGELUARAN (PIE CHART - PER BULAN)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text("Distribusi", style: AppFont.h4),
-
-                        // KONTROL BULAN PINDAH KE SINI
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 4, vertical: 2),
@@ -294,131 +226,69 @@ class _StatisticScreenState extends State<StatisticScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    _controller.categoryDataList.isEmpty
-                        ? Container(
-                            height: 200,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                borderRadius: BorderRadius.circular(24)),
-                            child: Text("Belum ada pengeluaran di bulan ini.",
-                                style: AppFont.subtitle))
-                        : Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                                color: AppColors.surface,
-                                borderRadius: BorderRadius.circular(24)),
-                            child: Column(
-                              children: [
-                                SizedBox(
-                                  height: 220,
-                                  child: PieChart(
-                                    PieChartData(
-                                      pieTouchData: PieTouchData(
-                                        touchCallback: (FlTouchEvent event,
-                                            pieTouchResponse) {
-                                          if (!event
-                                                  .isInterestedForInteractions ||
-                                              pieTouchResponse == null ||
-                                              pieTouchResponse.touchedSection ==
-                                                  null) {
-                                            _controller.setTouchedIndex(
-                                                -1, () => setState(() {}));
-                                            return;
-                                          }
-                                          _controller.setTouchedIndex(
-                                              pieTouchResponse.touchedSection!
-                                                  .touchedSectionIndex,
-                                              () => setState(() {}));
-                                        },
-                                      ),
-                                      borderData: FlBorderData(show: false),
-                                      sectionsSpace: 4,
-                                      centerSpaceRadius: 50,
-                                      sections: _buildDonutChartSections(),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-
-                                // INFO KATEGORI DIPILIH (Menggunakan monthlyExpense)
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.symmetric(
-                                      vertical: 16, horizontal: 20),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceVariant,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                        color: _controller.touchedIndex == -1
-                                            ? Colors.transparent
-                                            : _categoryColors[_controller
-                                                    .categoryDataList[
-                                                        _controller
-                                                            .touchedIndex]
-                                                    .key]!
-                                                .withOpacity(0.5),
-                                        width: 1.5),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                          _controller.touchedIndex == -1
-                                              ? "Total Pengeluaran Bulan Ini"
-                                              : "Pengeluaran ${_controller.categoryDataList[_controller.touchedIndex].key}",
-                                          style: AppFont.bodySmall.copyWith(
-                                              color: _controller.touchedIndex ==
-                                                      -1
-                                                  ? AppColors.textSecondary
-                                                  : _categoryColors[_controller
-                                                      .categoryDataList[
-                                                          _controller
-                                                              .touchedIndex]
-                                                      .key],
-                                              fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                          _controller.formatRupiah(
-                                              _controller.touchedIndex == -1
-                                                  ? _controller.monthlyExpense
-                                                  : _controller
-                                                      .categoryDataList[
-                                                          _controller
-                                                              .touchedIndex]
-                                                      .value),
-                                          style: AppFont.h2),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 24),
-
-                                // DAFTAR LEGEND
-                                ..._controller.categoryDataList
-                                    .asMap()
-                                    .entries
-                                    .map((entry) => LegendItem(
-                                          index: entry.key,
-                                          touchedIndex:
-                                              _controller.touchedIndex,
-                                          category: entry.value.key,
-                                          amount: entry.value.value,
-                                          color: _categoryColors[
-                                                  entry.value.key] ??
-                                              Colors.grey,
-                                          formattedAmount: _controller
-                                              .formatRupiah(entry.value.value),
-                                          onTap: () =>
-                                              _controller.setTouchedIndex(
-                                                  _controller.touchedIndex ==
-                                                          entry.key
-                                                      ? -1
-                                                      : entry.key,
-                                                  () => setState(() {})),
-                                        ))
-                                    .toList(),
-                              ],
-                            ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SummaryCard(
+                            title: "Pemasukan",
+                            formattedAmount:
+                                _controller.formatRupiah(_controller.income),
+                            color: AppColors.primary,
+                            icon: Icons.arrow_downward_rounded,
+                            actionId: "income",
+                            selectedMonth: _controller.currentDate,
                           ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: SummaryCard(
+                            title: "Pengeluaran",
+                            formattedAmount:
+                                _controller.formatRupiah(_controller.expense),
+                            color: AppColors.error,
+                            icon: Icons.arrow_upward_rounded,
+                            actionId: "expense",
+                            selectedMonth: _controller.currentDate,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // RINGKASAN KEUANGAN (Net Balance)
+                    FinancialStatus(
+                        income: _controller.income,
+                        expense: _controller.expense),
+                    const SizedBox(height: 32),
+
+                    // TREN HARIAN (Statis 30 Hari)
+                    TrendChart(
+                        spots: _controller.chartSpots,
+                        startDate: _controller.chartStartDate,
+                        formatRupiah: _controller.formatRupiah),
+                    const SizedBox(height: 32),
+
+                    // AI INSIGHT
+                    ArthaInsightCard(
+                        insight: _controller.aiInsight,
+                        isFetching: _controller.isFetchingAI,
+                        onFetch: () =>
+                            _controller.fetchAIInsight(() => setState(() {}))),
+                    const SizedBox(height: 32),
+
+                    // DISTRIBUSI PENGELUARAN (Dinamic Month)
+                    DistributionChartCard(
+                      isEmpty: _controller.categoryDataList.isEmpty,
+                      sections: _buildDonutChartSections(),
+                      touchedIndex: _controller.touchedIndex,
+                      categoryDataList: _controller.categoryDataList,
+                      monthlyExpense: _controller.monthlyExpense,
+                      categoryColors: _categoryColors,
+                      formatRupiah: _controller.formatRupiah,
+                      onTouch: (index) => _controller.setTouchedIndex(
+                          index, () => setState(() {})),
+                      onLegendTap: (index) => _controller.setTouchedIndex(
+                          index, () => setState(() {})),
+                    ),
                   ],
                 ),
               ),

@@ -1,27 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:arthatrack/controllers/finance_controller.dart';
+import 'package:arthatrack/controllers/target_controller.dart';
 import 'package:arthatrack/screens/transaction/add_transaction_screen.dart';
+import 'package:arthatrack/src/core/app_colors.dart';
+import 'package:arthatrack/src/core/app_font.dart';
+import 'package:arthatrack/screens/target/target_widget.dart'; // Import widget baru
 
 class TargetScreen extends StatefulWidget {
-  const TargetScreen({super.key});
+  final bool isFromNavbar;
+
+  const TargetScreen({super.key, this.isFromNavbar = false});
 
   @override
   State<TargetScreen> createState() => _TargetScreenState();
 }
 
 class _TargetScreenState extends State<TargetScreen> {
-  final FinanceController _financeController = FinanceController();
-  List<Map<String, dynamic>> _goals = [];
-  bool _isLoading = true;
-  String _aiInsight =
-      "Lihat apa kata Artha AI tentang progres dan target tabunganmu!";
-  bool _isFetchingAI = false;
+  late TargetController _controller;
 
   @override
   void initState() {
     super.initState();
-    _loadGoals();
+    _controller = TargetController();
+    _controller.init(() => setState(() {}));
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
@@ -30,72 +31,79 @@ class _TargetScreenState extends State<TargetScreen> {
       SnackBar(
         content: Text(
           message,
-          style:
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          style: AppFont.bodyMedium.copyWith(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: isError ? Colors.redAccent : const Color(0xFF00C853),
+        backgroundColor: isError ? AppColors.error : AppColors.primary,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(20), // Margin normal di bawah
+        margin: const EdgeInsets.all(20),
       ),
     );
   }
 
-  Future<void> _loadGoals() async {
-    setState(() => _isLoading = true);
-    final rawGoals = await _financeController.getUserSavingsGoals();
-    final goals = rawGoals.toList();
-
-    goals.sort((a, b) {
-      bool aAchieved = a['current_amount'] >= a['target_amount'];
-      bool bAchieved = b['current_amount'] >= b['target_amount'];
-      if (aAchieved == bAchieved) {
-        return DateTime.parse(
-          a['deadline'],
-        ).compareTo(DateTime.parse(b['deadline']));
-      }
-      return aAchieved ? 1 : -1;
-    });
-
-    if (mounted) {
-      setState(() {
-        _goals = goals;
-        _isLoading = false;
-      });
-    }
+  void _showErrorDialog(String message) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceVariant,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            const SizedBox(width: 8),
+            Text("Peringatan",
+                style: AppFont.h4), // Menggunakan AppFont yang ada
+          ],
+        ),
+        content: Text(message,
+            style: AppFont.bodyMedium.copyWith(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("OK Mengerti",
+                style: AppFont.bodyMedium.copyWith(
+                    color: AppColors.primary, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
-  Future<void> _fetchAIInsight() async {
-    setState(() => _isFetchingAI = true);
-    final insight = await _financeController.getQuickAIInsight('target');
-    if (mounted) {
-      setState(() {
-        _aiInsight = insight;
-        _isFetchingAI = false;
-      });
-    }
-  }
-
-  String _formatRupiah(double amount) {
-    return "Rp ${amount.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]}.')}";
-  }
-
-  int _calculateDaysLeft(String deadlineStr) {
-    try {
-      DateTime deadline = DateTime.parse(deadlineStr);
-      DateTime now = DateTime.now();
-      DateTime today = DateTime(now.year, now.month, now.day);
-      DateTime target = DateTime(deadline.year, deadline.month, deadline.day);
-      return target.difference(today).inDays;
-    } catch (e) {
-      return 0;
-    }
+  void _confirmDelete(int id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text("Hapus Target?", style: AppFont.h4),
+        content: Text("Target tabungan ini akan dihapus permanen.",
+            style: AppFont.bodyMedium.copyWith(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text("Batal",
+                style: AppFont.bodyMedium
+                    .copyWith(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _controller.deleteGoal(id);
+              _controller.loadGoals(() => setState(() {}));
+              _showSnackBar("Target berhasil dihapus 🗑️");
+            },
+            child: Text("Hapus",
+                style: AppFont.bodyMedium.copyWith(
+                    color: AppColors.error, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showGoalForm({Map<String, dynamic>? existingGoal}) {
-    final titleController = TextEditingController(
-      text: existingGoal?['goal_name'] ?? '',
-    );
+    final titleController =
+        TextEditingController(text: existingGoal?['goal_name'] ?? '');
     final amountController = TextEditingController();
     DateTime selectedDate = existingGoal != null
         ? DateTime.parse(existingGoal['deadline'])
@@ -105,18 +113,15 @@ class _TargetScreenState extends State<TargetScreen> {
       String rawAmount =
           existingGoal['target_amount'].toString().replaceAll('.0', '');
       amountController.text = rawAmount.replaceAllMapped(
-        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-        (Match m) => '${m[1]},',
-      );
+          RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},');
     }
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: AppColors.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
       builder: (modalContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -134,39 +139,29 @@ class _TargetScreenState extends State<TargetScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
+                        child: Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(2)))),
                     const SizedBox(height: 24),
-                    Text(
-                      existingGoal == null ? "Target Baru" : "Edit Target",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Text(existingGoal == null ? "Target Baru" : "Edit Target",
+                        style: AppFont.h3),
                     const SizedBox(height: 24),
                     TextField(
                       controller: titleController,
-                      style: const TextStyle(color: Colors.white),
+                      style: AppFont.bodyMedium,
                       decoration: InputDecoration(
                         labelText: "Nama Target (ex: Beli Laptop)",
-                        labelStyle: const TextStyle(color: Colors.grey),
+                        labelStyle: AppFont.subtitle,
                         filled: true,
-                        fillColor: const Color(0xFF2A2A2A),
+                        fillColor: AppColors.surfaceVariant,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none),
                         prefixIcon: const Icon(Icons.flag_rounded,
-                            color: Colors.indigoAccent),
+                            color: AppColors.primary),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -175,20 +170,19 @@ class _TargetScreenState extends State<TargetScreen> {
                       keyboardType: TextInputType.number,
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
-                        CurrencyInputFormatter(),
+                        CurrencyInputFormatter()
                       ],
-                      style: const TextStyle(color: Colors.white),
+                      style: AppFont.bodyMedium,
                       decoration: InputDecoration(
                         labelText: "Nominal Target",
-                        labelStyle: const TextStyle(color: Colors.grey),
+                        labelStyle: AppFont.subtitle,
                         prefixText: "Rp ",
-                        prefixStyle: const TextStyle(color: Colors.white),
+                        prefixStyle: AppFont.bodyMedium,
                         filled: true,
-                        fillColor: const Color(0xFF2A2A2A),
+                        fillColor: AppColors.surfaceVariant,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide.none,
-                        ),
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none),
                         prefixIcon: const Icon(Icons.monetization_on_rounded,
                             color: Colors.amber),
                       ),
@@ -204,9 +198,8 @@ class _TargetScreenState extends State<TargetScreen> {
                           lastDate: DateTime(2050),
                           builder: (context, child) => Theme(
                             data: ThemeData.dark().copyWith(
-                              colorScheme: const ColorScheme.dark(
-                                  primary: Colors.indigoAccent),
-                            ),
+                                colorScheme: const ColorScheme.dark(
+                                    primary: AppColors.primary)),
                             child: child!,
                           ),
                         );
@@ -217,19 +210,16 @@ class _TargetScreenState extends State<TargetScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 16, vertical: 18),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A2A),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
+                            color: AppColors.surfaceVariant,
+                            borderRadius: BorderRadius.circular(16)),
                         child: Row(
                           children: [
                             const Icon(Icons.calendar_month_rounded,
-                                color: Colors.tealAccent),
+                                color: AppColors.secondary),
                             const SizedBox(width: 12),
                             Text(
-                              "Tenggat Waktu: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
-                              style: const TextStyle(
-                                  color: Colors.white, fontSize: 16),
-                            ),
+                                "Tenggat Waktu: ${selectedDate.day}/${selectedDate.month}/${selectedDate.year}",
+                                style: AppFont.bodyMedium),
                           ],
                         ),
                       ),
@@ -239,16 +229,8 @@ class _TargetScreenState extends State<TargetScreen> {
                       width: double.infinity,
                       height: 55,
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigoAccent,
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
-                        ),
                         onPressed: () async {
-                          // TURUNKAN KEYBOARD SAAT TOMBOL DITEKAN
                           FocusManager.instance.primaryFocus?.unfocus();
-
-                          // VALIDASI MENGGUNAKAN ERROR DIALOG BARU
                           if (titleController.text.trim().isEmpty) {
                             _showErrorDialog("Nama target tidak boleh kosong!");
                             return;
@@ -257,41 +239,29 @@ class _TargetScreenState extends State<TargetScreen> {
                           double targetAmount = double.tryParse(
                                   amountController.text.replaceAll(',', '')) ??
                               0.0;
-
                           if (targetAmount <= 0) {
                             _showErrorDialog(
                                 "Nominal target harus lebih dari Rp 0!");
                             return;
                           }
 
-                          if (existingGoal == null) {
-                            await _financeController.addSavingsGoal(
-                              titleController.text.trim(),
-                              targetAmount,
-                              selectedDate.toIso8601String(),
-                            );
-                            _showSnackBar("Target baru berhasil dibuat! 🎯");
-                          } else {
-                            await _financeController.updateSavingsGoal(
-                              existingGoal['id'],
-                              titleController.text.trim(),
-                              targetAmount,
-                              selectedDate.toIso8601String(),
-                            );
-                            _showSnackBar("Target berhasil diperbarui! ✏️");
-                          }
+                          await _controller.saveGoal(
+                            existingId: existingGoal?['id'],
+                            name: titleController.text.trim(),
+                            amount: targetAmount,
+                            deadline: selectedDate.toIso8601String(),
+                          );
 
                           if (!modalContext.mounted) return;
                           Navigator.pop(modalContext);
-                          _loadGoals();
+                          _controller.loadGoals(() => setState(() {}));
+                          _showSnackBar(existingGoal == null
+                              ? "Target baru berhasil dibuat! 🎯"
+                              : "Target berhasil diperbarui! ✏️");
                         },
-                        child: const Text(
-                          "Simpan Target",
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16),
-                        ),
+                        child: Text("Simpan Target",
+                            style: AppFont.bodyMedium
+                                .copyWith(fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -312,11 +282,10 @@ class _TargetScreenState extends State<TargetScreen> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
+      backgroundColor: AppColors.surface,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
       builder: (modalContext) {
         bool isProcessing = false;
         return StatefulBuilder(
@@ -334,50 +303,36 @@ class _TargetScreenState extends State<TargetScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white24,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(2))),
                     const SizedBox(height: 24),
-                    Text(
-                      "Nabung untuk $goalName",
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
-                    ),
+                    Text("Nabung untuk $goalName",
+                        style: AppFont.h3, textAlign: TextAlign.center),
                     const SizedBox(height: 8),
-                    Text(
-                      "Kurang ${_formatRupiah(remaining)} lagi!",
-                      style: const TextStyle(color: Colors.grey),
-                    ),
+                    Text("Kurang ${_controller.formatRupiah(remaining)} lagi!",
+                        style: AppFont.subtitle),
                     const SizedBox(height: 24),
                     TextField(
                       controller: amountController,
                       keyboardType: TextInputType.number,
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
-                        CurrencyInputFormatter(),
+                        CurrencyInputFormatter()
                       ],
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold),
+                      style: AppFont.h2,
                       textAlign: TextAlign.center,
                       decoration: InputDecoration(
                         hintText: "0",
-                        hintStyle: const TextStyle(color: Colors.white24),
+                        hintStyle: AppFont.h2.copyWith(color: Colors.white24),
                         prefixText: "Rp ",
                         filled: true,
-                        fillColor: const Color(0xFF2A2A2A),
+                        fillColor: AppColors.surfaceVariant,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
-                        ),
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none),
                         contentPadding:
                             const EdgeInsets.symmetric(vertical: 24),
                       ),
@@ -388,16 +343,11 @@ class _TargetScreenState extends State<TargetScreen> {
                       height: 55,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00C853),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
-                        ),
+                            backgroundColor: AppColors.primary),
                         onPressed: isProcessing
                             ? null
                             : () async {
-                                FocusManager.instance.primaryFocus
-                                    ?.unfocus(); // TURUNKAN KEYBOARD
-
+                                FocusManager.instance.primaryFocus?.unfocus();
                                 double amountToAdd = double.tryParse(
                                         amountController.text
                                             .replaceAll(',', '')) ??
@@ -411,23 +361,19 @@ class _TargetScreenState extends State<TargetScreen> {
 
                                 setModalState(() => isProcessing = true);
                                 try {
-                                  await _financeController.addMoneyToGoal(
-                                    goalId,
-                                    amountToAdd,
-                                    goalName,
-                                  );
+                                  await _controller.addMoneyToGoal(
+                                      goalId, amountToAdd, goalName);
                                   if (!modalContext.mounted) return;
                                   Navigator.pop(modalContext);
 
                                   if (!mounted) return;
-                                  _loadGoals();
+                                  _controller.loadGoals(() => setState(() {}));
                                   _showSnackBar(
                                       "Berhasil menabung! Saldo utama telah dipotong. 🎉");
                                 } catch (e) {
                                   if (!modalContext.mounted) return;
                                   setModalState(() => isProcessing = false);
                                   if (mounted) {
-                                    // UBAH JUGA KE ERROR DIALOG BILA GAGAL (Misal saldo tidak cukup)
                                     _showErrorDialog(e
                                         .toString()
                                         .replaceAll('Exception: ', ''));
@@ -439,15 +385,10 @@ class _TargetScreenState extends State<TargetScreen> {
                                 width: 24,
                                 height: 24,
                                 child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 3),
-                              )
-                            : const Text(
-                                "Tambahkan Saldo",
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16),
-                              ),
+                                    color: Colors.white, strokeWidth: 3))
+                            : Text("Tambahkan Saldo",
+                                style: AppFont.bodyMedium
+                                    .copyWith(fontWeight: FontWeight.bold)),
                       ),
                     ),
                     const SizedBox(height: 32),
@@ -461,389 +402,97 @@ class _TargetScreenState extends State<TargetScreen> {
     );
   }
 
-  void _confirmDelete(int id) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          "Hapus Target?",
-          style: TextStyle(color: Colors.white),
-        ),
-        content: const Text(
-          "Target tabungan ini akan dihapus permanen.",
-          style: TextStyle(color: Colors.grey),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Batal", style: TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await _financeController.deleteSavingsGoal(id);
-              _loadGoals();
-              _showSnackBar("Target berhasil dihapus 🗑️");
-            },
-            child: const Text(
-              "Hapus",
-              style: TextStyle(
-                  color: Colors.redAccent, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showErrorDialog(String message) {
-    FocusManager.instance.primaryFocus?.unfocus(); // Turunkan keyboard otomatis
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF2A2A2A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text("Peringatan",
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(message, style: const TextStyle(color: Colors.grey)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("OK Mengerti",
-                style: TextStyle(
-                    color: Colors.indigoAccent, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: Colors.white,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          "Target Tabungan",
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        leading: widget.isFromNavbar
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    color: AppColors.textPrimary, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
+        title: Text("Target Tabungan", style: AppFont.h4),
         centerTitle: true,
       ),
-      body: _isLoading
+      body: _controller.isLoading
           ? const Center(
-              child: CircularProgressIndicator(color: Colors.indigoAccent),
-            )
+              child: CircularProgressIndicator(color: AppColors.primary))
           : RefreshIndicator(
-              onRefresh: _loadGoals,
-              color: Colors.indigoAccent,
+              onRefresh: () => _controller.loadGoals(() => setState(() {})),
+              color: AppColors.primary,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  bottom: 100,
-                ),
+                padding:
+                    const EdgeInsets.only(left: 20, right: 20, bottom: 100),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildAIInsightCard(),
+                    // Memanggil widget terpisah
+                    TargetAIInsightCard(
+                      insight: _controller.aiInsight,
+                      isFetching: _controller.isFetchingAI,
+                      onFetch: () =>
+                          _controller.fetchAIInsight(() => setState(() {})),
+                    ),
                     const SizedBox(height: 24),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          "Wishlist Kamu",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text("Wishlist Kamu", style: AppFont.h4),
                         ElevatedButton.icon(
                           onPressed: () => _showGoalForm(),
-                          icon: const Icon(
-                            Icons.add_rounded,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                          label: const Text(
-                            "Target Baru",
-                            style: TextStyle(color: Colors.white),
-                          ),
+                          icon: const Icon(Icons.add_rounded,
+                              color: AppColors.textPrimary, size: 16),
+                          label: Text("Target Baru",
+                              style: AppFont.bodySmall
+                                  .copyWith(fontWeight: FontWeight.bold)),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigoAccent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 0,
-                            ),
+                                horizontal: 16, vertical: 0),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    _goals.isEmpty
-                        ? const Center(
+                    _controller.goals.isEmpty
+                        ? Center(
                             child: Padding(
-                              padding: EdgeInsets.all(32.0),
+                              padding: const EdgeInsets.all(32.0),
                               child: Text(
-                                "Belum ada target. Yuk buat sekarang!",
-                                style: TextStyle(color: Colors.grey),
-                              ),
+                                  "Belum ada target. Yuk buat sekarang!",
+                                  style: AppFont.subtitle),
                             ),
                           )
                         : ListView.builder(
                             shrinkWrap: true,
                             physics: const NeverScrollableScrollPhysics(),
-                            itemCount: _goals.length,
+                            itemCount: _controller.goals.length,
                             itemBuilder: (context, index) {
-                              final goal = _goals[index];
+                              final goal = _controller.goals[index];
                               double target = goal['target_amount'];
                               double current = goal['current_amount'];
-                              double progress = (current / target).clamp(
-                                0.0,
-                                1.0,
-                              );
-                              bool isAchieved = current >= target;
-                              int daysLeft = _calculateDaysLeft(
-                                goal['deadline'],
-                              );
 
-                              return Card(
-                                color: const Color(0xFF1E1E1E),
-                                margin: const EdgeInsets.only(bottom: 16),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                elevation: 0,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(
-                                              color: isAchieved
-                                                  ? Colors.green.withOpacity(
-                                                      0.2,
-                                                    )
-                                                  : Colors.indigoAccent
-                                                      .withOpacity(0.2),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Icon(
-                                              isAchieved
-                                                  ? Icons.emoji_events_rounded
-                                                  : Icons.flag_rounded,
-                                              color: isAchieved
-                                                  ? Colors.green
-                                                  : Colors.indigoAccent,
-                                              size: 24,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  goal['goal_name'],
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  isAchieved
-                                                      ? "Target Tercapai! 🎉"
-                                                      : (daysLeft < 0
-                                                          ? "Terlambat ${daysLeft.abs()} hari"
-                                                          : "Sisa $daysLeft hari"),
-                                                  style: TextStyle(
-                                                    color: isAchieved
-                                                        ? Colors.green
-                                                        : (daysLeft <= 7
-                                                            ? Colors.redAccent
-                                                            : Colors.grey),
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          PopupMenuButton<String>(
-                                            color: const Color(0xFF2A2A2A),
-                                            icon: const Icon(
-                                              Icons.more_vert_rounded,
-                                              color: Colors.grey,
-                                            ),
-                                            onSelected: (value) {
-                                              if (value == 'edit')
-                                                _showGoalForm(
-                                                  existingGoal: goal,
-                                                );
-                                              if (value == 'delete')
-                                                _confirmDelete(goal['id']);
-                                            },
-                                            itemBuilder: (context) => [
-                                              const PopupMenuItem(
-                                                value: 'edit',
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.edit,
-                                                      color: Colors.white,
-                                                      size: 18,
-                                                    ),
-                                                    SizedBox(width: 8),
-                                                    Text(
-                                                      "Edit",
-                                                      style: TextStyle(
-                                                        color: Colors.white,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              const PopupMenuItem(
-                                                value: 'delete',
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                      Icons.delete,
-                                                      color: Colors.redAccent,
-                                                      size: 18,
-                                                    ),
-                                                    SizedBox(width: 8),
-                                                    Text(
-                                                      "Hapus",
-                                                      style: TextStyle(
-                                                        color: Colors.redAccent,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 16),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            _formatRupiah(current),
-                                            style: TextStyle(
-                                              color: isAchieved
-                                                  ? Colors.green
-                                                  : Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                          Text(
-                                            "dari ${_formatRupiah(target)}",
-                                            style: const TextStyle(
-                                              color: Colors.grey,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      ClipRRect(
-                                        borderRadius: BorderRadius.circular(10),
-                                        child: LinearProgressIndicator(
-                                          value: progress,
-                                          minHeight: 8,
-                                          backgroundColor: const Color(
-                                            0xFF2A2A2A,
-                                          ),
-                                          valueColor:
-                                              AlwaysStoppedAnimation<Color>(
-                                            isAchieved
-                                                ? Colors.green
-                                                : Colors.indigoAccent,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 16),
-                                      if (!isAchieved)
-                                        SizedBox(
-                                          width: double.infinity,
-                                          height: 40,
-                                          child: OutlinedButton.icon(
-                                            onPressed: () => _showAddMoneyForm(
-                                              goal['id'],
-                                              goal['goal_name'],
-                                              target,
-                                              current,
-                                            ),
-                                            icon: const Icon(
-                                              Icons.add_circle_outline_rounded,
-                                              color: Colors.white,
-                                              size: 18,
-                                            ),
-                                            label: const Text(
-                                              "Nabung",
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            style: OutlinedButton.styleFrom(
-                                              side: const BorderSide(
-                                                color: Colors.indigoAccent,
-                                              ),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
+                              return TargetGoalCard(
+                                goal: goal,
+                                target: target,
+                                current: current,
+                                progress: (current / target).clamp(0.0, 1.0),
+                                isAchieved: current >= target,
+                                daysLeft: _controller
+                                    .calculateDaysLeft(goal['deadline']),
+                                formattedCurrent:
+                                    _controller.formatRupiah(current),
+                                formattedTarget:
+                                    _controller.formatRupiah(target),
+                                onEdit: () => _showGoalForm(existingGoal: goal),
+                                onDelete: () => _confirmDelete(goal['id']),
+                                onAddMoney: () => _showAddMoneyForm(goal['id'],
+                                    goal['goal_name'], target, current),
                               );
                             },
                           ),
@@ -851,102 +500,6 @@ class _TargetScreenState extends State<TargetScreen> {
                 ),
               ),
             ),
-    );
-  }
-
-  Widget _buildAIInsightCard() {
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF1E1E1E),
-            Colors.indigo.shade900.withOpacity(0.4),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.indigoAccent.withOpacity(0.5),
-          width: 1,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.indigoAccent.withOpacity(0.1),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.auto_awesome_rounded,
-                color: Color(0xFFB388FF),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                "Artha AI Target Insight",
-                style: TextStyle(
-                  color: Color(0xFFB388FF),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _aiInsight,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 40,
-            child: ElevatedButton.icon(
-              onPressed: _isFetchingAI ? null : _fetchAIInsight,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigoAccent.withOpacity(0.8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              icon: _isFetchingAI
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(
-                      Icons.lightbulb_outline_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-              label: Text(
-                _isFetchingAI ? "Menganalisis..." : "✨ Dapatkan Motivasi AI",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

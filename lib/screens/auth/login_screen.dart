@@ -113,8 +113,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // Aksi saat tombol sidik jari ditekan
   Future<void> _handleBiometric() async {
-    String? errorMessage = await _authController.loginWithBiometric();
-
+    String username = _usernameController.text.trim();
+    String? errorMessage = await _authController.loginWithBiometric(username);
     if (errorMessage == null) {
       _showMessage("Login Biometrik Berhasil!");
       if (!mounted) return;

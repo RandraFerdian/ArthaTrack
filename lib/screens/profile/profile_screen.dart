@@ -96,6 +96,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _isAccelEnabled = value);
   }
 
+  Future<void> _openEditProfile() async {
+    final updated = await Navigator.pushNamed(
+      context,
+      AppRoutes.editProfile,
+      arguments: {'currentName': _userName, 'currentBio': _userBio},
+    );
+
+    if (updated == true) {
+      await _loadUserData();
+      widget.onProfileUpdated?.call();
+    }
+  }
+
   void _handleLogout() {
     showDialog(
       context: context,
@@ -238,18 +251,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.edit_square, color: Colors.grey),
-                    onPressed: () async {
-                      bool? updated = await Navigator.pushNamed(
-                        context,
-                        AppRoutes.editProfile,
-                        arguments: {
-                          'currentName': _userName,
-                          'currentBio': _userBio,
-                        },
-                      );
-                      if (updated == true) _loadUserData();
-                      widget.onProfileUpdated?.call();
-                    },
+                    onPressed: _openEditProfile,
                   ),
                 ],
               ),
@@ -265,6 +267,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 12),
             _buildSettingsContainer(
               children: [
+                _buildSettingsTile(
+                  icon: Icons.edit_rounded,
+                  iconColor: const Color(0xFF2962FF),
+                  title: "Edit Profil",
+                  subtitle: "Ubah nama atau bio Anda",
+                  isAction: true,
+                  onTap: _openEditProfile,
+                ),
+                _buildDivider(),
                 _buildSettingsTile(
                     icon: Icons.fingerprint_rounded,
                     iconColor: const Color(0xFF00C853),
